@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SentinelCore.Demon1.Core/SentinelCore.Demon1.Core.csproj" />
+    <Project Path="src/SentinelCore.Demon1.Simulations/SentinelCore.Demon1.Simulations.csproj" />
+  </Folder>
+  <Folder Name="/Mode_Apprentissage/">
+    <Project Path="Mode_Apprentissage/src/SentinelCore.Demon1.Learning/SentinelCore.Demon1.Learning.csproj" />
+    <Project Path="Mode_Apprentissage/src/SentinelCore.Demon1.Learning.Collector/SentinelCore.Demon1.Learning.Collector.csproj" />
+    <Project Path="Mode_Apprentissage/simulation/SentinelCore.Demon1.Learning.Simulation/SentinelCore.Demon1.Learning.Simulation.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SentinelCore.Demon1.Tests/SentinelCore.Demon1.Tests.csproj" />
+  </Folder>
+</Solution>
+

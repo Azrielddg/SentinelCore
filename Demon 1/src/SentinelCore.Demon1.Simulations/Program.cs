@@ -1,0 +1,3 @@
+using SentinelCore.Demon1.Core;
+using System.Text.Json;
+var store=new InMemoryProfileStore();var engine=new BehaviorEngine(store,new ConservativeAdmissionPolicy());var sid="S-1-5-21-demo";var now=DateTimeOffset.UtcNow;for(var i=0;i<20;i++)engine.Process(new(sid,now.AddDays(-10+i/2),new Dictionary<string,double>{{"typing_rate",100+(i%5)-2},{"mouse_activity",20+(i%3)}},"development","active","local",1,true));var report=engine.Process(new(sid,now,new Dictionary<string,double>{{"typing_rate",180},{"mouse_activity",21}},"development","active","local",1,true));Console.WriteLine(JsonSerializer.Serialize(report,new JsonSerializerOptions{WriteIndented=true}));

@@ -1,0 +1,269 @@
+DEMON 1 — 50 SIMULATIONS
+Toutes les données sont synthétiques : aucune frappe, mot de passe, image, visage ou identité réelle.
+Le démon 1 produit un contexte; le démon 3 prend les décisions.
+
+CAS 01 — Routine daytime work
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : Routine daytime work.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 02 — Night work on approved project
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : Night work on approved project.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 03 — New keyboard recalibration
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : New keyboard recalibration.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 04 — Mouse sensitivity changed
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : Mouse sensitivity changed.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 05 — Short absence and return
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : Short absence and return.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 06 — Lunch break shift
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : Lunch break shift.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 07 — New legitimate application
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : New legitimate application.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 08 — Fatigue changes typing speed
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : Fatigue changes typing speed.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 09 — Accessibility input device
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : Accessibility input device.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 10 — Approved remote session
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : Approved remote session.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 11 — Keyboard layout changed
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : Keyboard layout changed.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 12 — Travel changes time zone
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : Travel changes time zone.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 13 — Normal workstation unlock
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : Normal workstation unlock.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 14 — Camera unavailable
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : Camera unavailable.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 15 — Camera opt-out
+Catégorie : Normal | étiquette : benign
+Simulation : routine session; aggregated cadence and mouse variance; no key content captured; sujet : Camera opt-out.
+Attendu : Context normal; update baseline slowly only if eligible; no identity verdict.
+
+CAS 16 — Atypical typing and mouse
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Atypical typing and mouse.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 17 — Sensitive action after absence
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Sensitive action after absence.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 18 — Secondary account outside hours
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Secondary account outside hours.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 19 — Unexpected overnight unlock
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Unexpected overnight unlock.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 20 — Profile shift during incident
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Profile shift during incident.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 21 — Repeated auth prompts declined
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Repeated auth prompts declined.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 22 — Unexpected user switch
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Unexpected user switch.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 23 — Sensitive change without recent auth
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Sensitive change without recent auth.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 24 — Several behavior signals deviate
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Several behavior signals deviate.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 25 — Accessibility mode changes inputs
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Accessibility mode changes inputs.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 26 — Session used while owner absent
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Session used while owner absent.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 27 — Unusual admin session
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Unusual admin session.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 28 — Conflicting foreground and session
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Conflicting foreground and session.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 29 — Camera signal conflicts with session
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Camera signal conflicts with session.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 30 — Repeated profile reset requests
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Repeated profile reset requests.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 31 — Master auth success
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Master auth success.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 32 — Master auth failure
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Master auth failure.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 33 — Guest tries protected settings
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Guest tries protected settings.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 34 — Normal human profile with threat alert
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Normal human profile with threat alert.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 35 — Owner absent autonomous agent
+Catégorie : Deviation | étiquette : suspicious
+Simulation : aggregated signal differs from baseline; session context synthetic; sujet : Owner absent autonomous agent.
+Attendu : Emit deviation report with confidence and evidence; Guard decides any step-up authentication.
+
+CAS 36 — Profile too new
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Profile too new.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 37 — Insufficient input samples
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Insufficient input samples.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 38 — Keyboard metrics missing
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Keyboard metrics missing.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 39 — Mouse API unavailable
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Mouse API unavailable.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 40 — System clock changed
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : System clock changed.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 41 — Sleep resume gap
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Sleep resume gap.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 42 — Profile store unavailable
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Profile store unavailable.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 43 — Profile integrity error
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Profile integrity error.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 44 — Single unusual work shift
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Single unusual work shift.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 45 — Shared Windows account
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Shared Windows account.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 46 — Temporary motor change
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Temporary motor change.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 47 — Camera permission denied
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Camera permission denied.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 48 — Face detected no validated liveness
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Face detected no validated liveness.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 49 — Windows Hello unavailable
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Windows Hello unavailable.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+CAS 50 — Multiple signals conflict
+Catégorie : Ambiguous | étiquette : uncertain
+Simulation : signal unavailable, conflicting, or sample count insufficient; sujet : Multiple signals conflict.
+Attendu : Mark unknown/low confidence; freeze learning if needed; request context, never infer identity.
+
+
+CONTRAT COMMUN INTER-DÉMONS V1
+Transport produit : Named Pipe locale \\.\pipe\SentinelCore.Guard, hébergée par le démon 3. Connexion locale uniquement, ACL explicites limitées aux comptes de service SentinelCore; refuser clients anonymes/inconnus et accès réseau. D1 et D2 sont clients. Pour tests, utiliser un transport JSONL (un message JSON par ligne) derrière l’interface commune IInterDaemonBus; le contenu et l’ordre des messages restent identiques au transport produit.
+
+Enveloppe obligatoire : messageId (UUID), correlationId (UUID ou ID d’affaire), timestampUtc (ISO-8601 UTC), sourceDaemon (HumanBehaviorMonitor | ThreatMonitor | RiskResponseGuard), destination (RiskResponseGuard | HumanBehaviorMonitor | ThreatMonitor), messageType, schemaVersion=1, expiresAtUtc (ISO-8601 UTC), payload (objet JSON). Limite commune : 64 KiB par message UTF-8 avant framing. Les messages sur le pipe sont précédés d’un entier longueur; JSONL utilise une ligne complète. Refuser payload invalide, champ requis absent, version inconnue, message expiré ou source non authentifiée.
+
+Handshake : D1/D2 -> D3 HELLO; D3 -> client WELCOME avec sessionId et supportedSchema. Chaque message reçu est ACK(messageId, status=ACCEPTED|REJECTED|DUPLICATE, reason?). D3 déduplique messageId. Émetteur retente au plus 3 fois avec backoff borné; pas de retry après expiration.
+
+Types v1 : HELLO, WELCOME, HEARTBEAT, USER_CONTEXT (D1->D3), BEHAVIOR_DEVIATION (D1->D3), THREAT_FINDING (D2->D3), TELEMETRY_GAP (D2->D3), SESSION_CONTEXT_REQUEST (D2->D3), SESSION_CONTEXT_RESPONSE (D1->D3 via D3), CONTEXT_REQUEST (D3->D1/D2), CONTEXT_RESPONSE (D1/D2->D3), MASTER_AUTH_REQUIRED (D3->D1/UI), MASTER_AUTH_RESULT (D1->D3), ACTION_REQUEST (D3->adaptateur interne seulement), ACTION_RESULT (adaptateur->D3). D1/D2 rejettent ACTION_REQUEST.
+
+Relais de contexte : D2 envoie SESSION_CONTEXT_REQUEST au Guard avec correlationId, champs demandés parmi sessionState, localOrRemote, recentAuthBand, deadlineUtc. D3 vérifie allowlist et consentement, crée CONTEXT_REQUEST à D1, attend au plus 2 secondes (configurable), puis transmet à D2 une CONTEXT_RESPONSE via son pipe avec la même correlationId; en absence de réponse, statut NOT_AVAILABLE. D2 ne reçoit jamais profil, métriques de frappe/souris, caméra, identité faciale, nom utilisateur ni secret. Autres demandes D3->D1/D2 suivent le même délai, expiration et whitelist.
+
+Action : ACTION_REQUEST n’est pas un message inter-démon routé. D3 appelle uniquement son ActionCatalog interne avec actionType enum, arguments typés et allowlist, policyId/version, evidenceRefs, approvalRef?, idempotencyKey, deadlineUtc. Les actions sont simulées par défaut. Aucun shell/PowerShell arbitraire, chemin non validé ou contenu IA n’est exécutable.
+
+Pannes : chaque démon publie HEARTBEAT toutes les 10 secondes; après 30 secondes sans heartbeat D3 marque le démon DEGRADED. Files d’attente bornées, jamais bloquer les collecteurs. D3 continue ses règles déterministes sans Ollama; si D1 est indisponible, poursuivre l’analyse D2 sans le signal humain; si D2 manque, un signal D1 seul ne peut pas déclencher une action destructive. Tous les délais, rejets, pertes, décisions et résultats sont journalisés.
