@@ -33,6 +33,8 @@ La fenêtre permet :
 
 La base est enregistrée dans `%LOCALAPPDATA%\SentinelCore\Demon1Learning\learning.db`. Les profils et mesures sont chiffrés par DPAPI par compte utilisateur Windows. Le mot de passe maître et les empreintes sont enregistrés dans `auth.bin`, également protégé DPAPI. Les préférences générales sont dans `settings.json`.
 
+Dans la fenêtre « Voir la base », les dates, contextes, états, décisions et noms des mesures sont présentés en français. Les noms techniques de tables/colonnes et les identifiants internes restent stables pour préserver la compatibilité avec le code et les anciennes bases.
+
 ## Données collectées
 
 Le collecteur Windows Raw Input agrège les événements par période : fréquence de frappe, durée d’appui, intervalle et pauses entre frappes, vitesse/accélération/curvature de la souris et intervalles de clic. Les codes de touches n’existent qu’en mémoire le temps de calculer une durée d’appui; aucun caractère ni texte n’est écrit dans le profil. Les mesures brutes temporaires sont abandonnées après calcul.

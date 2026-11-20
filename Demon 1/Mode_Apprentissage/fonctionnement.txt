@@ -28,7 +28,7 @@ Exemple : il peut enregistrer « rythme moyen de frappe = valeur X » sans conse
 
 5. Suivre le travail et consulter la base
 
-La fenêtre d’application actualise l’état et les mesures environ chaque seconde. « Voir la base » affiche les périodes déjà enregistrées et leurs mesures. Les données sont gardées sur cet ordinateur dans le dossier local SentinelCore; les mesures et les profils sont protégés par Windows pour le compte courant.
+La fenêtre d’application actualise l’état et les mesures environ chaque seconde. « Voir la base » affiche les périodes déjà enregistrées et leurs mesures. Les colonnes, décisions, états et noms des mesures sont affichés en français. Les noms techniques internes de la base restent inchangés pour que l’application continue à lire les anciennes données. Les données sont gardées sur cet ordinateur dans le dossier local SentinelCore; les mesures et les profils sont protégés par Windows pour le compte courant.
 
 Exemple : après une période active, tu peux ouvrir la base et voir la date, la qualité et les mesures de clavier/souris, sans retrouver les caractères tapés.
 

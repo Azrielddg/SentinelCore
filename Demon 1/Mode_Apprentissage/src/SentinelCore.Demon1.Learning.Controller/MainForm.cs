@@ -139,8 +139,8 @@ internal sealed class MainForm : Form
         try
         {
             using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path)); var json = doc.RootElement;
-            _progress.Text = $"Profil : {Value(json, "State")} | fenêtres acceptées : {Value(json, "AcceptedWindows")} | jours : {Value(json, "DistinctDays")} | calibration : {Value(json, "CalibrationProgressPercent")}%";
-            _measures.Text = "Mesures de la dernière période : " + (json.TryGetProperty("latestMeasures", out var measures) ? string.Join(" · ", measures.EnumerateObject().Select(x => $"{x.Name}={x.Value}")) : "en attente");
+            _progress.Text = $"Profil : {LearningLabels.State(Value(json, "State"))} | périodes acceptées : {Value(json, "AcceptedWindows")} | jours : {Value(json, "DistinctDays")} | calibration : {Value(json, "CalibrationProgressPercent")}%";
+            _measures.Text = "Mesures de la dernière période : " + (json.TryGetProperty("latestMeasures", out var measures) ? string.Join(" · ", measures.EnumerateObject().Select(x => $"{LearningLabels.Feature(x.Name)} : {x.Value}")) : "en attente");
             var note = Value(json, "note"); if (!string.IsNullOrWhiteSpace(note)) _measures.Text += "\nNote : " + note;
         }
         catch (IOException) { }
@@ -156,12 +156,19 @@ internal sealed class MainForm : Form
             using var repository = new SqliteLearningProfileRepository(Path.Combine(_dataRoot, "learning.db"));
             var entries = repository.ReadRecent(_sid, 200).Select(x => new
             {
-                Date = x.ObservedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
-                Résultat = x.Disposition.ToString(), Profil = x.State.ToString(), Fenêtres = x.AcceptedWindows,
-                Qualité = Math.Round(x.Quality, 2), Mesures = string.Join("; ", x.Features.Select(f => $"{f.Key}={Math.Round(f.Value, 3)}")), Raison = x.Reason
+                Date = x.ObservedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss"),
+                Contexte = LearningLabels.Context(x.ContextKey), Résultat = LearningLabels.Disposition(x.Disposition),
+                Profil = LearningLabels.State(x.State), PériodesAcceptées = x.AcceptedWindows,
+                Qualité = Math.Round(x.Quality, 2), Mesures = string.Join("; ", x.Features.Select(f => $"{LearningLabels.Feature(f.Key)} : {Math.Round(f.Value, 3)}")), Motif = x.Reason
             }).ToArray();
             var form = new Form { Text = "Base d’apprentissage — dernières périodes", StartPosition = FormStartPosition.CenterParent, Size = new Size(1000, 600), MinimumSize = new Size(800, 400) };
             var grid = new DataGridView { Dock = DockStyle.Fill, ReadOnly = true, AutoGenerateColumns = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells, DataSource = entries };
+            grid.DataBindingComplete += (_, _) =>
+            {
+                if (grid.Columns["Date"] is { } dateColumn) dateColumn.HeaderText = "Date et heure";
+                if (grid.Columns["Contexte"] is { } contextColumn) contextColumn.HeaderText = "Contexte clavier/souris";
+                if (grid.Columns["PériodesAcceptées"] is { } acceptedColumn) acceptedColumn.HeaderText = "Périodes acceptées";
+            };
             form.Controls.Add(grid); form.ShowDialog(this);
         }
         catch (Exception ex) { MessageBox.Show("Impossible de lire la base : " + ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error); }
