@@ -1,0 +1,123 @@
+FONCTIONNEMENT DU MODE APPRENTISSAGE — DEMON 1
+
+But du dossier
+----------------
+Ce dossier contient la première partie du démon 1. Son travail actuel est de construire un profil des habitudes du propriétaire à partir de mesures déjà résumées du clavier et de la souris.
+
+Le programme ne lit pas les mots tapés. Il ne filme pas encore l’utilisateur. Il reçoit seulement des nombres résumant une période d’activité, ainsi qu’une indication disant si le propriétaire a été vérifié et si l’activité semble humaine.
+
+1. Recevoir une période d’activité
+----------------------------------
+Le programme reçoit une « fenêtre » : un petit résumé de l’activité récente. La durée de cette période sera fournie par le futur capteur.
+
+Exemple :
+- le clavier a servi à environ 70 frappes par minute ;
+- les pressions sur les touches durent en moyenne autour de 100 millisecondes ;
+- la souris a bougé à une vitesse moyenne donnée ;
+- les clics sont espacés d’environ 600 millisecondes.
+
+Ces chiffres décrivent le rythme d’utilisation. Ils ne contiennent ni les lettres tapées, ni les mots de passe, ni le contenu du presse-papiers.
+
+À ce stade, le vrai capteur Windows n’est pas encore écrit. La simulation fournit elle-même ces nombres pour montrer le fonctionnement.
+
+2. Vérifier si la période peut servir à l’apprentissage
+------------------------------------------------------
+Avant d’ajouter une période au profil, le programme vérifie plusieurs conditions :
+- le propriétaire doit avoir été vérifié ;
+- les entrées doivent sembler provenir d’une personne, et non d’une automatisation connue ;
+- le démon 2 ne doit pas avoir signalé de menace ;
+- les mesures doivent être suffisamment complètes et fiables ;
+- les noms et les valeurs des mesures doivent faire partie de la liste prévue.
+
+Exemple : si le propriétaire n’a pas été vérifié, la période est mise de côté. Elle ne sert pas à apprendre les habitudes d’un inconnu comme si c’était celles du propriétaire.
+
+Une période mise de côté ne modifie pas le profil. Le programme explique pourquoi il l’a écartée.
+
+Important : aujourd’hui, les mentions « propriétaire vérifié » et « activité humaine probable » sont fournies par l’appelant. La caméra, Windows Hello et la collecte réelle des entrées ne sont pas encore reliés à ce programme.
+
+3. Apprendre les habitudes progressivement
+-----------------------------------------
+Le programme conserve des mesures séparées selon le contexte. Par exemple, il ne mélange pas automatiquement les habitudes d’un clavier intégré avec celles d’un clavier externe ou d’une session à distance.
+
+Pour chaque mesure, il garde au maximum les 256 valeurs les plus récentes. Il résume ces valeurs pour connaître ce qui est habituel et la variation normale de l’utilisateur. Il utilise surtout le milieu des valeurs observées et leur dispersion, afin qu’une valeur exceptionnelle ne déforme pas facilement tout le profil.
+
+Exemple : si la plupart des périodes montrent entre 65 et 80 frappes par minute, une période à 72 est cohérente avec l’habitude. Une période à 500 est très éloignée et ne doit pas changer la moyenne habituelle.
+
+4. Comprendre l’état du profil
+------------------------------
+Le profil passe par plusieurs étapes :
+- NO_PROFILE : aucune période n’a été reçue ;
+- CALIBRATING : l’apprentissage commence ;
+- PROVISIONAL : au moins 20 périodes acceptées sur au moins 3 jours ; le profil existe, mais il est encore jeune ;
+- READY : au moins 60 périodes sur au moins 7 jours, dont 30 périodes avec des mesures clavier et 30 avec des mesures souris ;
+- FROZEN : l’apprentissage est arrêté parce qu’une menace a été signalée.
+
+Exemple : 60 périodes obtenues dans une seule journée ne suffisent pas. Le programme exige aussi que l’apprentissage couvre plusieurs jours, pour ne pas prendre une seule séance inhabituelle comme modèle permanent.
+
+Ces nombres sont des réglages initiaux du projet. Ils doivent être ajustés après observation d’un usage réel.
+
+5. Mettre de côté une période très différente
+--------------------------------------------
+Quand le profil est prêt, le programme compare une nouvelle période aux valeurs habituelles. Si une mesure s’éloigne beaucoup du profil, il met cette période de côté plutôt que de l’incorporer immédiatement.
+
+Exemple : après plusieurs jours où la vitesse de frappe reste proche de 70, une période affichant 500 frappes par minute est écartée. Cela évite qu’un script ou une mesure erronée transforme rapidement le profil du propriétaire.
+
+Cette comparaison n’identifie pas à elle seule la personne. Elle sert à empêcher une période suspecte de modifier les habitudes apprises.
+
+6. Geler et reprendre l’apprentissage
+------------------------------------
+Le démon 1 peut geler le profil lorsqu’une menace est signalée. Les nouvelles périodes ne modifient alors plus le profil.
+
+Exemple : si le démon 2 signale un script suspect, le profil est gelé afin que les gestes produits pendant l’incident ne deviennent pas la nouvelle référence.
+
+La reprise nécessite une approbation explicite et une vérification du propriétaire. Le programme ne reprend pas tout seul après une alerte.
+
+7. Enregistrer le profil
+------------------------
+Sous Windows, le dépôt fourni chiffre le profil avec la protection intégrée à Windows, pour le compte Windows qui exécute le programme. Le SID du compte sert aussi à séparer les profils.
+
+Le profil contient des mesures résumées, pas les frappes brutes. Une version en mémoire est également disponible pour la simulation.
+
+Exemple : les habitudes du compte Edith sont rangées séparément de celles d’un autre compte Windows. Le fichier du profil n’est pas enregistré en clair.
+
+8. Produire un état lisible
+---------------------------
+Le programme peut renvoyer l’état du profil, le nombre de périodes acceptées, le nombre de jours couverts, le nombre de périodes clavier/souris et un résumé statistique de chaque mesure.
+
+Exemple : « profil provisoire : 20 périodes sur 3 jours ; mesures clavier et souris présentes ; apprentissage encore incomplet ».
+
+9. Simulation et résultat mesuré
+--------------------------------
+La simulation crée 70 périodes artificielles étalées sur 7 jours. Elle ajoute ensuite deux exemples suspects : une entrée marquée comme automatisée et une vitesse de frappe extrême.
+
+Résultat obtenu dans la simulation :
+- 70 périodes normales sur 70 ont été acceptées ;
+- 2 périodes suspectes sur 2 ont été mises de côté ;
+- le profil a atteint l’état READY ;
+- le programme a traité environ 1 063 périodes agrégées par seconde dans ce lancement de simulation.
+
+Les 100 % décrivent uniquement ces exemples artificiels. Ils ne signifient pas que le démon reconnaît correctement un propriétaire dans 100 % des cas. Le débit ne mesure pas la vitesse d’une vraie caméra ou d’un vrai collecteur de clavier/souris.
+
+Ce qui est fait dans ce premier lot
+-----------------------------------
+- le service de calibration du profil ;
+- les étapes CALIBRATING, PROVISIONAL, READY et FROZEN ;
+- le filtrage des périodes trop peu fiables ou suspectes ;
+- le résumé des habitudes par contexte ;
+- une limite de conservation des mesures récentes ;
+- un dépôt de profil chiffré pour Windows ;
+- un programme de simulation et une documentation de comparaison.
+
+Ce qui n’est pas encore fait
+----------------------------
+- le capteur Windows qui mesure réellement les rythmes de frappe et de souris ;
+- l’enregistrement de la vidéo d’enrôlement ;
+- la comparaison du visage et la vérification de présence réelle ;
+- la détection complète des scripts, robots, IA ou périphériques automatisés ;
+- la validation sur les habitudes réelles du propriétaire ;
+- les résultats de reconnaissance (fausses acceptations, faux rejets ou taux d’erreur) ;
+- l’envoi de l’état du mode apprentissage au démon 3 dans le système final.
+
+Conclusion
+----------
+Cette partie est un prototype de calibration isolé, utile pour être relu et servir de base au développement des capteurs. Elle n’est pas encore le mode apprentissage complet du démon 1 et ne doit pas être présentée comme un système qui sait déjà reconnaître visuellement ou comportementalement le propriétaire.

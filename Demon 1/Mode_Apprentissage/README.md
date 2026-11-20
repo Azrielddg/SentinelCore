@@ -54,3 +54,5 @@ Notre lot n’est pas encore un vérificateur d’identité et n’a donc pas d�
 3. Comparer les sessions avec des données publiques et un jeu pilote volontaire, puis mesurer FAR, FRR, EER, délai de calibration et coûts CPU/mémoire.
 4. Publier les changements de maturité vers le démon 3 via le contrat inter-démons.
 
+
+Une explication en langage simple, avec des exemples pour chaque fonction, se trouve dans [fonctionnement.txt](fonctionnement.txt).
