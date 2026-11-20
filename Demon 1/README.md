@@ -1,22 +1,12 @@
-# Demon 1 — noyau comportemental
+# Démon 1 — moniteur d’identité et d’interaction humaine
+
+Le démon 1 doit reconnaître le propriétaire visuellement et comportementalement, comparer ces signaux à l’activité active du poste, estimer si une autre personne ou une automatisation manipule l’ordinateur et signaler au démon 3 tout indice important. Il produit des observations et des scores explicables; le démon 3 prend les décisions de sécurité.
+
+La spécification cible est dans [PROPOSITION_TECHNIQUE.md](PROPOSITION_TECHNIQUE.md). Le code présent sur cette branche est encore le noyau statistique initial : il ne capture pas encore clavier/souris, n’enrôle pas de visage, ne détecte pas les entrées injectées, et son seuil de publication n’est pas encore le seuil demandé de 60 %. Ne pas déployer ce prototype comme détecteur d’identité.
 
 ## Arborescence
-- `src/SentinelCore.Demon1.Core`: moteur, admission, statistiques, stockage DPAPI et publication.
-- `src/SentinelCore.Demon1.Simulations`: démo locale.
-- `tests/SentinelCore.Demon1.Tests`: tests sans framework tiers et fixtures exportées SQLite.
-- `PROPOSITION_TECHNIQUE.md`: audit et choix algorithmiques.
+- `src/SentinelCore.Demon1.Core`: moteur de profil, stockage et publication actuels.
+- `src/SentinelCore.Demon1.Simulations`: simulation locale.
+- `tests/SentinelCore.Demon1.Tests`: fixtures synthétiques et vérifications actuelles.
 
-## Exécution
-Depuis ce dossier: `dotnet build SentinelCore.Demon1.slnx`; `dotnet run --project tests/SentinelCore.Demon1.Tests`; `dotnet run --project src/SentinelCore.Demon1.Simulations`.
-
-## Algorithmes
-Pour chaque variable: médiane et dispersion robuste max(1.4826*MAD, IQR/1.349), score robuste, seuil provisoire 3.5. Heures modélisées en buckets de deux heures/jour de semaine, jamais en différence linéaire autour de minuit. Profil immature/échantillon faible produit faible confiance. Admission exige consentement, qualité >=0.80 et aucune suspicion Guard, finding sérieux D2, conflit, capteur dégradé ou caractéristique atypique. Le gel persiste jusqu’à reprise explicitement authentifiée.
-
-## Profil et vie privée
-DPAPI CurrentUser avec entropy liée au SID; écriture atomique initial/current/snapshots quotidiens d’historique, métadonnées minimales des échantillons refusés, et restauration d’une version avec confirmation propriétaire. Aucun contenu de frappe, mot de passe, presse-papiers, image ou trajectoire souris. L’installateur futur devra appliquer les ACL restrictives au répertoire racine. Pas de capteur réel ni de Named Pipe production dans cette première implémentation; bus JSONL simulation seulement.
-
-## Limites
-Algorithme de départ non validé sur poste réel; buckets horaires simples, aucun benchmark ni test longue durée. Les 50 cas synthétiques vérifient le mécanisme, pas un taux de performance terrain. Pas de River/Elastic/UEBA comme dépendance; comparaison dans PROPOSITION_TECHNIQUE.md.
-
-## Dépendances
-Aucun package NuGet tiers; DPAPI natif Windows; .NET 10.
+Les 50 scénarios synthétiques testent la logique, pas la performance biométrique terrain. Voir le document technique pour les composants à développer, les contrats D1→D3, les signaux Windows réutilisables et les tests d’acceptation requis.
