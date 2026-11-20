@@ -9,8 +9,14 @@ namespace SentinelCore.Demon1.Learning.Controller;
 public sealed class AuthStore
 {
     private const int Iterations = 600_000;
-    private readonly string _path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SentinelCore", "Demon1Learning", "auth.bin");
-    private readonly string _sid = WindowsIdentity.GetCurrent().User?.Value ?? throw new InvalidOperationException("Compte Windows introuvable.");
+    private readonly string _path;
+    private readonly string _sid;
+
+    public AuthStore(string? dataRoot = null)
+    {
+        _path = Path.Combine(dataRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SentinelCore", "Demon1Learning"), "auth.bin");
+        _sid = WindowsIdentity.GetCurrent().User?.Value ?? throw new InvalidOperationException("Compte Windows introuvable.");
+    }
     public bool IsConfigured => File.Exists(_path);
 
     public void SetPassword(string password)

@@ -54,7 +54,7 @@ La branche `feature/demon-1` regroupe le travail du démon 1. Le contrôleur et 
 - `dotnet build Demon 1/SentinelCore.Demon1.slnx -c Release` : réussi, 0 avertissement et 0 erreur.
 - Publication autonome `win-x64` en fichier unique : réussie.
 - Simulation d’apprentissage synthétique : 70/70 périodes admissibles acceptées et 2/2 périodes inadmissibles rejetées; 322 périodes SQLite persistées et relues. Ces pourcentages évaluent uniquement les règles sur des données synthétiques, pas la reconnaissance du propriétaire.
-- Test fumée du collecteur publié : un `status.json` déjà présent a été mis à jour, le ticket a été consommé une fois, l’arrêt a été appliqué, puis le JSON final a été relu. L’exception d’accès montrée auparavant n’est pas réapparue.
+- Test fumée du collecteur publié : un `status.json` déjà présent a été mis à jour, le ticket a été consommé une fois, l’arrêt a été appliqué, puis le JSON final a été relu. Une preuve incorrecte a été refusée et un test temporaire a vérifié que le mot de passe maître fonctionne sans apparaître en clair dans le fichier. L’exception d’accès montrée auparavant n’est pas réapparue.
 - Lancement UI : l’EXE s’ouvre et affiche la configuration initiale. La création du mot de passe et l’invite biométrique sont laissées à l’utilisateur; ces invites sensibles ne sont pas automatisées.
 
 Le taux de faux rejet/faux acceptation du futur module de validation n’est pas mesurable avec ce module d’apprentissage seul. La collecte terrain (durées, variations d’appareils et qualité des mesures) reste à évaluer sur des sessions choisies par le propriétaire.

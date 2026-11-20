@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using SentinelCore.Demon1.Learning;
+using SentinelCore.Demon1.Learning.Controller;
 
 if (args.Length == 2 && args[0] == "--collector-smoke")
 {
@@ -90,6 +91,12 @@ static async Task RunCollectorSmoke(string appExe)
     var sid = System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value;
     var root = Path.Combine(Path.GetTempPath(), $"sentinelcore-collector-smoke-{Guid.NewGuid():N}");
     Directory.CreateDirectory(root);
+    var authRoot = Path.Combine(root, "auth-check"); var auth = new AuthStore(authRoot);
+    const string testPassword = "SentinelCore-Test-Only-Password-2026";
+    auth.SetPassword(testPassword);
+    if (!auth.VerifyPassword(testPassword) || auth.VerifyPassword(testPassword + "wrong")) throw new InvalidDataException("L’enregistrement ou la vérification du mot de passe maître a échoué.");
+    var authFileText = File.ReadAllText(Path.Combine(authRoot, "auth.bin"));
+    if (authFileText.Contains(testPassword, StringComparison.Ordinal)) throw new InvalidDataException("Le mot de passe maître apparaît en clair dans son fichier.");
     var database = Path.Combine(root, "learning.db"); var status = Path.Combine(root, "status.json"); var stop = Path.Combine(root, "stop.signal");
     var ticket = Path.Combine(root, "ticket.bin");
     File.WriteAllText(status, "existing status to exercise replacement");
@@ -131,5 +138,6 @@ static async Task RunCollectorSmoke(string appExe)
     Console.WriteLine("OK — status.json préexistant a été réécrit sans erreur d’accès.");
     Console.WriteLine("OK — l’arrêt manuel a terminé le processus et le JSON final est lisible.");
     Console.WriteLine("OK — une preuve incorrecte est refusée sans démarrer de collecte.");
+    Console.WriteLine("OK — le mot de passe maître est vérifié et son fichier ne contient pas le secret en clair.");
     Console.WriteLine($"Base temporaire de validation : {root}");
 }
