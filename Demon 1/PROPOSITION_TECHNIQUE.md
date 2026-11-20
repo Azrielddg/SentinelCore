@@ -141,4 +141,4 @@ La proposition SentinelCore ajoute à la biométrie comportementale applicative 
 
 ## État d’implémentation du mode apprentissage
 
-Le dossier `Mode_Apprentissage/` contient maintenant un service autonome de calibration, un dépôt DPAPI CurrentUser et une simulation. Les seuils initiaux de profil provisoire/prêt et les conditions d’admission sont décrits dans son README. Les collecteurs clavier/souris et l’enrôlement visuel restent des intégrations ultérieures; le service reçoit actuellement leurs valeurs agrégées et attestations via un contrat de données.
+Le dossier `Mode_Apprentissage/` contient maintenant le collecteur Windows clavier/souris, la fenêtre de contrôle, la configuration du mot de passe maître, la vérification Windows Hello, le dépôt SQLite protégé par DPAPI et les simulations. Les seuils de profil et les conditions d’admission sont décrits dans son README. Le verdict comportemental est séparé dans `Mode_Validation/`; l’enrôlement visuel SentinelCore reste ultérieur (Windows Hello ne fournit pas son gabarit biométrique à l’application).

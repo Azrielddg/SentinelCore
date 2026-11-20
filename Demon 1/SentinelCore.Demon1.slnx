@@ -9,6 +9,9 @@
     <Project Path="Mode_Apprentissage/src/SentinelCore.Demon1.Learning.Controller/SentinelCore.Demon1.Learning.Controller.csproj" />
     <Project Path="Mode_Apprentissage/simulation/SentinelCore.Demon1.Learning.Simulation/SentinelCore.Demon1.Learning.Simulation.csproj" />
   </Folder>
+  <Folder Name="/Mode_Validation/">
+    <Project Path="Mode_Validation/src/SentinelCore.Demon1.Validation/SentinelCore.Demon1.Validation.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SentinelCore.Demon1.Tests/SentinelCore.Demon1.Tests.csproj" />
   </Folder>

@@ -1,0 +1,11 @@
+COMMENT FONCTIONNE LA VALIDATION DU COMPORTEMENT
+
+Cette partie reçoit un profil appris et un petit résumé récent du clavier et de la souris. Elle compare les deux sans enregistrer le texte tapé.
+
+Exemple : si le propriétaire tape à son rythme habituel et déplace la souris de façon similaire, le résultat indique « comportement cohérent ». Si les mesures s’en éloignent beaucoup, le résultat signale une « divergence de comportement » au démon 3.
+
+Le résultat n’est pas le pourcentage de risque d’une attaque. Le nombre 60 est seulement un seuil de différence avec le profil. Avant de le calibrer sur de vrais essais, le système marque l’évaluation comme non validée.
+
+Si le profil est encore en apprentissage, si le clavier ou la souris n’a pas donné assez de mesures, ou si les capteurs sont de mauvaise qualité, le module répond « données insuffisantes » au lieu de prétendre connaître la personne.
+
+Cette première version sait comparer à un profil propriétaire. Elle ne sait pas donner le nom d’un deuxième utilisateur. Il faudra recueillir ses mesures lors d’une session séparée et étiquetée pour tester si les deux personnes sont réellement distinguables.
