@@ -138,3 +138,7 @@ La proposition SentinelCore ajoute à la biométrie comportementale applicative 
 - BioCatch, biométrie comportementale : https://www.biocatch.com/resources/solution-brief/advanced-behavioral-biometrics
 - Étude multimodale frappe + souris : https://www.sciencedirect.com/science/article/pii/S0925231216314321
 - Microsoft Audit Event 4688 : https://learn.microsoft.com/windows/security/threat-protection/auditing/event-4688
+
+## État d’implémentation du mode apprentissage
+
+Le dossier `Mode_Apprentissage/` contient maintenant un service autonome de calibration, un dépôt DPAPI CurrentUser et une simulation. Les seuils initiaux de profil provisoire/prêt et les conditions d’admission sont décrits dans son README. Les collecteurs clavier/souris et l’enrôlement visuel restent des intégrations ultérieures; le service reçoit actuellement leurs valeurs agrégées et attestations via un contrat de données.

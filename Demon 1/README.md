@@ -1,12 +1,10 @@
 # Démon 1 — moniteur d’identité et d’interaction humaine
 
-Le démon 1 doit reconnaître le propriétaire visuellement et comportementalement, comparer ces signaux à l’activité active du poste, estimer si une autre personne ou une automatisation manipule l’ordinateur et signaler au démon 3 tout indice important. Il produit des observations et des scores explicables; le démon 3 prend les décisions de sécurité.
+Le démon 1 reconnaîtra le propriétaire visuellement et comportementalement, comparera les signaux à l’activité active du poste, estimera si une autre personne ou une automatisation manipule l’ordinateur et signalera les écarts au démon 3. Le démon 2 demeure responsable de la télémétrie de menace et des processus Windows natifs; le démon 3 corrèle et décide.
 
-La spécification cible est dans [PROPOSITION_TECHNIQUE.md](PROPOSITION_TECHNIQUE.md). Le code présent sur cette branche est encore le noyau statistique initial : il ne capture pas encore clavier/souris, n’enrôle pas de visage, ne détecte pas les entrées injectées, et son seuil de publication n’est pas encore le seuil demandé de 60 %. Ne pas déployer ce prototype comme détecteur d’identité.
+## Lots de travail
 
-## Arborescence
-- `src/SentinelCore.Demon1.Core`: moteur de profil, stockage et publication actuels.
-- `src/SentinelCore.Demon1.Simulations`: simulation locale.
-- `tests/SentinelCore.Demon1.Tests`: fixtures synthétiques et vérifications actuelles.
+- [Mode_Apprentissage](Mode_Apprentissage/README.md) : calibration et stockage protégé du profil de comportement. C’est le premier lot implémenté.
+- [Spécification générale](PROPOSITION_TECHNIQUE.md) : architecture cible, sources Windows, contrat D1→D3, seuil de divergence >60 et critères d’acceptation.
 
-Les 50 scénarios synthétiques testent la logique, pas la performance biométrique terrain. Voir le document technique pour les composants à développer, les contrats D1→D3, les signaux Windows réutilisables et les tests d’acceptation requis.
+Le mode apprentissage reçoit actuellement des fenêtres agrégées et des états de vérification simulés. Le vrai collecteur clavier/souris et le vérificateur visuel restent à brancher. Ne pas présenter ce lot comme une reconnaissance d’identité complète.
