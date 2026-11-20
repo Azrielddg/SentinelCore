@@ -6,8 +6,8 @@ using System.Text.Json;
 namespace SentinelCore.Demon1.Learning;
 
 public enum LearningState { NO_PROFILE, CALIBRATING, PROVISIONAL, READY, FROZEN }
-public enum OwnerVerification { NONE, WINDOWS_HELLO, VISUAL_MATCH }
-public enum InputOrigin { HUMAN_LIKELY, INJECTED, UNKNOWN }
+public enum OwnerVerification { NONE, OWNER_CONFIRMED, WINDOWS_HELLO, VISUAL_MATCH }
+public enum InputOrigin { HUMAN_LIKELY, PHYSICAL_DEVICE, INJECTED, UNKNOWN }
 public enum ThreatContext { CLEAR, SUSPICIOUS }
 public enum SampleDisposition { ACCEPTED, QUARANTINED, REJECTED }
 
@@ -24,6 +24,18 @@ public sealed record LearningWindow(
 public sealed record FeatureBaseline(int Count, double Median, double Mad, double Iqr, double LowerQuartile, double UpperQuartile);
 public sealed record LearningReport(LearningState State, int AcceptedWindows, int KeyboardWindows, int MouseWindows, int DistinctDays, double CalibrationProgressPercent, IReadOnlyDictionary<string, FeatureBaseline> Features, string Summary);
 public sealed record LearningResult(SampleDisposition Disposition, string Reason, LearningReport Report);
+public sealed record LearningHistoryEntry(long Id, DateTimeOffset ObservedAtUtc, string ContextKey, SampleDisposition Disposition, string Reason, LearningState State, int AcceptedWindows, double Quality, IReadOnlyDictionary<string, double> Features);
+
+public interface ILearningHistoryRepository
+{
+    void Append(LearningWindow window, LearningResult result);
+    IReadOnlyList<LearningHistoryEntry> ReadRecent(string sid, int take = 100);
+}
+
+public interface IAtomicLearningRepository : ILearningProfileRepository, ILearningHistoryRepository
+{
+    void Record(LearningWindow window, LearningResult result, LearningProfile? updatedProfile);
+}
 
 public sealed record ContextProfile(
     int AcceptedWindows,
@@ -47,11 +59,25 @@ public interface ILearningProfileRepository
     void Save(string sid, LearningProfile profile);
 }
 
-public sealed class InMemoryLearningProfileRepository : ILearningProfileRepository
+public sealed class InMemoryLearningProfileRepository : IAtomicLearningRepository
 {
     private readonly ConcurrentDictionary<string, LearningProfile> _profiles = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ConcurrentQueue<LearningHistoryEntry>> _history = new(StringComparer.Ordinal);
+    private long _nextId;
     public LearningProfile? Load(string sid) => _profiles.GetValueOrDefault(sid);
     public void Save(string sid, LearningProfile profile) => _profiles[sid] = profile;
+    public void Append(LearningWindow window, LearningResult result)
+    {
+        var queue = _history.GetOrAdd(window.Sid, _ => new ConcurrentQueue<LearningHistoryEntry>());
+        queue.Enqueue(new(Interlocked.Increment(ref _nextId), window.ObservedAtUtc, window.ContextKey, result.Disposition, result.Reason, result.Report.State, result.Report.AcceptedWindows, window.Quality, new Dictionary<string, double>(window.Features)));
+        while (queue.Count > 10000) queue.TryDequeue(out _);
+    }
+    public void Record(LearningWindow window, LearningResult result, LearningProfile? updatedProfile)
+    {
+        if (updatedProfile is not null) Save(window.Sid, updatedProfile);
+        Append(window, result);
+    }
+    public IReadOnlyList<LearningHistoryEntry> ReadRecent(string sid, int take = 100) => _history.TryGetValue(sid, out var queue) ? queue.Reverse().Take(Math.Clamp(take, 1, 1000)).ToArray() : [];
 }
 
 /// <summary>Local per-user DPAPI storage; only aggregate feature windows are persisted.</summary>
@@ -145,7 +171,6 @@ public sealed class LearningModeService(ILearningProfileRepository repository)
     private const int ReadyDays = 7;
     private const int ModalityWindowsRequired = 30;
     private const double MinimumQuality = 0.80;
-    private const double OutlierZThreshold = 3.5;
     private readonly ILearningProfileRepository _repository = repository;
     private readonly object _gate = new();
 
@@ -162,16 +187,19 @@ public sealed class LearningModeService(ILearningProfileRepository repository)
             ValidateEnvelope(window);
             var profile = _repository.Load(window.Sid) ?? NewProfile(window.Sid, window.ObservedAtUtc);
             if (!profile.Contexts.ContainsKey(window.ContextKey) && profile.Contexts.Count >= MaxContextsPerProfile)
-                return Result(SampleDisposition.REJECTED, "Limite de contextes de profil atteinte; demander une calibration propriétaire explicite.", profile, EmptyContext(), window.ContextKey);
+                return Record(window, SampleDisposition.REJECTED, "Limite de contextes de profil atteinte; demander une calibration propriétaire explicite.", profile, EmptyContext(), window.ContextKey, null);
             var context = profile.Contexts.GetValueOrDefault(window.ContextKey) ?? EmptyContext();
-            var state = GetState(context);
-            if (profile.Frozen) return Result(SampleDisposition.QUARANTINED, $"Apprentissage gelé : {profile.FreezeReason ?? "motif non précisé"}.", profile, context, window.ContextKey);
+            if (profile.Frozen) return Record(window, SampleDisposition.QUARANTINED, $"Apprentissage gelé : {profile.FreezeReason ?? "motif non précisé"}.", profile, context, window.ContextKey, null);
 
             var rejection = EligibilityReason(window);
-            if (rejection is not null) return Result(SampleDisposition.QUARANTINED, rejection, profile, context, window.ContextKey);
-            if (state == LearningState.READY && HasOutlier(window.Features, context))
-                return Result(SampleDisposition.QUARANTINED, "Écart robuste pendant le profil prêt; observation exclue pour éviter l’empoisonnement.", profile, context, window.ContextKey);
-
+            if (rejection is not null)
+            {
+                var profileToPersist = window.ThreatContext == ThreatContext.SUSPICIOUS
+                    ? profile with { Frozen = true, FreezeReason = "Signal de menace pendant l’apprentissage.", UpdatedAtUtc = window.ObservedAtUtc }
+                    : null;
+                var reportProfile = profileToPersist ?? profile;
+                return Record(window, SampleDisposition.QUARANTINED, rejection, reportProfile, context, window.ContextKey, profileToPersist);
+            }
             var samples = context.FeatureSamples.ToDictionary(x => x.Key, x => new List<double>(x.Value), StringComparer.Ordinal);
             foreach (var (name, value) in window.Features)
             {
@@ -194,8 +222,7 @@ public sealed class LearningModeService(ILearningProfileRepository repository)
                 samples);
             var contexts = new Dictionary<string, ContextProfile>(profile.Contexts, StringComparer.Ordinal) { [window.ContextKey] = updatedContext };
             var updatedProfile = profile with { UpdatedAtUtc = window.ObservedAtUtc, Contexts = contexts };
-            _repository.Save(window.Sid, updatedProfile);
-            return Result(SampleDisposition.ACCEPTED, "Fenêtre agrégée admise au profil; aucune frappe brute n’est conservée.", updatedProfile, updatedContext, window.ContextKey);
+            return Record(window, SampleDisposition.ACCEPTED, "Fenêtre agrégée admise au profil; aucune frappe brute n’est conservée.", updatedProfile, updatedContext, window.ContextKey, updatedProfile);
         }
     }
 
@@ -248,30 +275,27 @@ public sealed class LearningModeService(ILearningProfileRepository repository)
 
     private static string? EligibilityReason(LearningWindow window)
     {
-        if (window.OwnerVerification is OwnerVerification.NONE) return "Propriétaire non vérifié; observation mise en quarantaine.";
-        if (window.InputOrigin is not InputOrigin.HUMAN_LIKELY) return "Provenance des entrées non humaine ou inconnue; observation mise en quarantaine.";
+        if (window.OwnerVerification is OwnerVerification.NONE) return "Propriétaire non confirmé; observation mise en quarantaine.";
+        if (window.InputOrigin is not (InputOrigin.HUMAN_LIKELY or InputOrigin.PHYSICAL_DEVICE)) return "Provenance des entrées non admissible; observation mise en quarantaine.";
         if (window.ThreatContext is not ThreatContext.CLEAR) return "Signal de menace présent; observation mise en quarantaine.";
         if (!double.IsFinite(window.Quality) || window.Quality < MinimumQuality) return "Qualité du capteur inférieure à 0,80; observation mise en quarantaine.";
         return null;
     }
 
-    private static bool HasOutlier(IReadOnlyDictionary<string, double> features, ContextProfile context)
-    {
-        foreach (var (name, value) in features)
-        {
-            if (!context.FeatureSamples.TryGetValue(name, out var prior) || prior.Count < 20) continue;
-            var median = Median(prior);
-            var mad = Median(prior.Select(x => Math.Abs(x - median)).ToList());
-            var q1 = Quantile(prior, .25); var q3 = Quantile(prior, .75);
-            var scale = Math.Max(1.4826 * mad, (q3 - q1) / 1.349);
-            var z = scale > 1e-9 ? Math.Abs(value - median) / scale : (Math.Abs(value - median) < 1e-9 ? 0 : double.PositiveInfinity);
-            if (z >= OutlierZThreshold) return true;
-        }
-        return false;
-    }
-
     private static LearningResult Result(SampleDisposition disposition, string reason, LearningProfile profile, ContextProfile context, string contextKey)
         => new(disposition, reason, BuildReport(profile, context, contextKey));
+
+    private LearningResult Record(LearningWindow window, SampleDisposition disposition, string reason, LearningProfile profile, ContextProfile context, string contextKey, LearningProfile? profileToPersist)
+    {
+        var result = Result(disposition, reason, profile, context, contextKey);
+        if (_repository is IAtomicLearningRepository atomic) atomic.Record(window, result, profileToPersist);
+        else
+        {
+            if (profileToPersist is not null) _repository.Save(window.Sid, profileToPersist);
+            if (_repository is ILearningHistoryRepository history) history.Append(window, result);
+        }
+        return result;
+    }
 
     private static LearningReport BuildReport(LearningProfile profile, ContextProfile context, string contextKey)
     {

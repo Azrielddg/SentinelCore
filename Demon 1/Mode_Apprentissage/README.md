@@ -1,58 +1,64 @@
 # Mode apprentissage — démon 1
 
-Ce dossier contient le premier lot autonome du démon 1 : le service qui calibre et conserve un profil agrégé des habitudes du propriétaire.
+Ce dossier contient le premier mode utilisable du démon 1 : une collecte démarrée manuellement, le calcul de mesures de clavier/souris, la création progressive du profil et l’enregistrement dans SQLite.
 
-## Cycle de profil
+## Démarrer la fenêtre de contrôle
 
-- `NO_PROFILE` : aucun échantillon reçu.
-- `CALIBRATING` : collecte des fenêtres d’activité acceptées.
-- `PROVISIONAL` : au moins 20 fenêtres réparties sur 3 jours; profil consultable, mais immature.
-- `READY` : au moins 60 fenêtres sur 7 jours, avec au moins 30 fenêtres clavier et 30 fenêtres souris dans le même contexte. L’adaptation reste filtrée.
-- `FROZEN` : signal de menace; aucune nouvelle donnée ne modifie le profil jusqu’à une reprise explicitement approuvée après vérification du propriétaire.
-
-Ces seuils sont les valeurs initiales du produit, à valider sur l’usage réel.
-
-## Admission d’une fenêtre
-
-L’entrée est déjà agrégée : le collecteur qui sera ajouté plus tard transforme Raw Input en mesures statistiques. Le service refuse les caractéristiques inconnues, les valeurs invalides, la qualité inférieure à 0,80, l’identité non vérifiée, une provenance d’entrée injectée ou inconnue, et toute fenêtre associée à un signal de menace. Après maturité, une fenêtre qui dépasse 3,5 dispersions robustes est mise en quarantaine pour réduire le risque d’empoisonnement du profil.
-
-Les champs de frappe sont des mesures de cadence/durée, jamais des caractères. Seuls les agrégats récents (maximum 256 valeurs par caractéristique et contexte) sont persistés. Le dépôt Windows protège le profil par DPAPI CurrentUser et lie l’entropie au SID. L’adaptateur de caméra et le vrai collecteur clavier/souris ne sont pas encore inclus : l’appelant doit fournir une preuve d’identité et une fenêtre agrégée.
-
-## Caractéristiques acceptées
-
-`typing.rate`, `typing.dwell_median_ms`, `typing.flight_median_ms`, `typing.pause_ratio`, `mouse.speed_median`, `mouse.acceleration_p95`, `mouse.curvature_median`, `mouse.click_interval_median_ms`.
-
-Le contexte (par exemple `LOCAL|INTEGRATED_KB|MOUSE_USB`) évite de fusionner directement un clavier intégré, un clavier externe ou une session distante. Ne pas placer un nom de fichier, un chemin ou une donnée personnelle dans `ContextKey`.
-
-## Exécuter la simulation
-
-Depuis le dossier `Demon 1` :
+Ouvre PowerShell, puis lance le fichier :
 
 ```powershell
-dotnet run --project Mode_Apprentissage/simulation/SentinelCore.Demon1.Learning.Simulation
+powershell -ExecutionPolicy Bypass -File ".\Demon 1\Mode_Apprentissage\Controler-Apprentissage.ps1"
 ```
 
-La simulation fait apprendre 70 fenêtres synthétiques sur 7 jours, présente deux cas que le filtre doit mettre en quarantaine, puis mesure le débit local du service. Les ratios 70/70 et 2/2 sont des résultats de règles déterministes sur des données artificielles, pas de la précision biométrique terrain.
+Le script n’active aucune collecte au démarrage. Dans son menu, choisis **1** et confirme que tu es le propriétaire. Les choix **2**, **3** et **4** servent respectivement à suivre les mesures, consulter la base et arrêter la collecte. Quitter le menu arrête la collecte si tu le confirmes. La collecte s’arrête aussi automatiquement après 90 secondes sans interaction; il faut alors la redémarrer manuellement.
 
-## Comparaison aux approches existantes
+Le collecteur fonctionne seulement pendant cette période manuellement démarrée. Il n’est pas installé en service et ne se lance pas automatiquement avec Windows.
 
-- Le benchmark [CMU de Killourhy et Maxion](https://www.cs.cmu.edu/~keystroke/) compare des détecteurs avec protocole reproductible. Il rapporte notamment 9,62 % d’EER pour Manhattan mis à l’échelle et 11,01 % pour Mahalanobis sur le jeu étudié ([article et résultats](https://www.cs.cmu.edu/~ksk/KillourhyMaxion2009.pdf)). Une EER de 9,62 % signifie que les taux de fausse acceptation et de faux rejet sont chacun proches de 9,62 % à ce point de fonctionnement; ce n’est pas une exactitude universelle. Le jeu porte sur des phrases de mot de passe et ne représente pas notre mode continu souris+clavier.
-- [TypingDNA](https://api.typingdna.com/docs/index.html) documente ses limites : faux rejets et fausses acceptations existent, et la biométrie de frappe ne doit pas être le facteur unique.
-- Le [challenge KVC desktop](https://arxiv.org/abs/2401.16559) rapporte une EER aussi basse que 3,33 % pour les meilleurs modèles sur son corpus et son protocole. Cela montre ce que peut donner un gros corpus spécialisé, pas ce que l’on peut promettre pour un seul propriétaire sur un poste réel.
-- Ce lot choisit médiane/MAD/IQR et un historique borné pour la calibration locale : données rares, calcul léger, inspectabilité et protection contre l’empoisonnement. Il ne prétend pas battre les EER publiées tant qu’un protocole comparable n’a pas été exécuté.
+## Ce qui est réellement recueilli
 
-## Résultat mesuré dans l’environnement de développement
+Windows Raw Input fournit les signaux de clavier/souris. Le collecteur travaille sur des périodes de 15 secondes. Il calcule des rythmes et durées : fréquence de frappe, durée d’appui, intervalle entre frappes, pauses, vitesse et variations de la souris, changements de direction et intervalle entre clics. Il ne garde pas le texte tapé. Les codes de touche sont utilisés temporairement en mémoire pour mesurer le temps d’appui, puis abandonnés.
 
-La compilation du projet de simulation a réussi avec 0 avertissement et 0 erreur. La simulation synthétique atteint `READY`, accepte 70/70 fenêtres (100 %), met en quarantaine 2/2 observations suspectes (100 %) et mesure 1 063 fenêtres agrégées/s sur 2 000 appels (Windows, .NET 10, build Debug, dépôt mémoire). Le débit dépend du poste et ne représente pas le débit caméra/capteurs ni une performance d’identification.
+Les événements utilisés dans la fenêtre PowerShell sont exclus du profil pour éviter que les commandes de contrôle n’apprennent les touches de suivi elles-mêmes. Les fenêtres sans assez d’activité sont ignorées. Une période utile doit atteindre une qualité minimale de 0,80.
 
-Notre lot n’est pas encore un vérificateur d’identité et n’a donc pas d’EER/FAR/FRR comparable. Annoncer un pourcentage de reconnaissance maintenant serait inventer un résultat.
+La collecte ne décide pas qui est devant l’écran. Au démarrage, l’utilisateur confirme manuellement « je suis le propriétaire ». Cette confirmation n’est pas une reconnaissance faciale ni Windows Hello. Le module de comparaison d’identité reste séparé.
 
-## Suite technique
+## Cycle du profil
 
-1. Relier l’admission au collecteur Windows de mesures clavier/souris.
-2. Relier le champ `OwnerVerification` au vérificateur visuel/Windows Hello.
-3. Comparer les sessions avec des données publiques et un jeu pilote volontaire, puis mesurer FAR, FRR, EER, délai de calibration et coûts CPU/mémoire.
-4. Publier les changements de maturité vers le démon 3 via le contrat inter-démons.
+- `NO_PROFILE` : aucun échantillon reçu.
+- `CALIBRATING` : collecte des périodes acceptées.
+- `PROVISIONAL` : au moins 20 périodes réparties sur 3 jours.
+- `READY` : au moins 60 périodes sur 7 jours, avec au moins 30 périodes clavier et 30 souris dans le même contexte.
+- `FROZEN` : le profil est gelé après réception d’un signal de menace par le service d’apprentissage.
 
+Ces valeurs sont les réglages initiaux. Le collecteur présent n’est pas encore relié au démon 2; en fonctionnement isolé, il ne reçoit donc pas de signal réel de menace.
 
-Une explication en langage simple, avec des exemples pour chaque fonction, se trouve dans [fonctionnement.txt](fonctionnement.txt).
+## Enregistrement et consultation
+
+La base active est créée ici : `%LOCALAPPDATA%\SentinelCore\Demon1Learning\learning.db`. Elle est propre au compte Windows. Les mesures et les profils sont chiffrés avec la protection Windows du compte courant avant leur inscription dans SQLite. La fenêtre PowerShell peut relire les dernières périodes, les déchiffrer localement et afficher les statistiques; elle ne montre ni texte tapé ni image.
+
+Le code de la base est dans `SqliteLearningProfileRepository.cs`; le collecteur Windows est dans `src/SentinelCore.Demon1.Learning.Collector`; la fenêtre de contrôle manuelle est `Controler-Apprentissage.ps1`.
+
+## Mesures de cette version
+
+Compilation de la solution : réussite, 0 avertissement et 0 erreur. Simulation de l’apprentissage SQLite : 70/70 périodes confirmées acceptées et 2/2 périodes non admissibles écartées (une provenance injectée, une période sans confirmation du propriétaire). La simulation a écrit 322 périodes dans SQLite, puis en a relu et déchiffré 5 pour l’affichage. Débit local observé : environ 50 périodes/seconde en mode Release avec chiffrement DPAPI et SQLite. À une période collectée toutes les 15 secondes, cela représente environ 750 fois le débit requis dans cette simulation.
+
+Les deux taux de 100 % sont ceux de règles d’admission testées sur des cas synthétiques; ils ne représentent pas le taux de reconnaissance du propriétaire. Le débit mesuré est très supérieur au rythme réel (une période toutes les 15 secondes), mais il ne valide pas encore le bon fonctionnement de chaque clavier, souris, session à distance ou condition matérielle.
+
+## Limites à garder en tête
+
+- Windows Hello peut gérer la connexion par visage sur les appareils dotés d’une caméra infrarouge compatible, mais son modèle facial est géré par Windows et n’est pas fourni à ce module. Le contrôle actuel utilise une confirmation manuelle du propriétaire.
+- Aucun visage n’est encore enregistré dans cette base.
+- La comparaison visuelle, la détection de présence réelle et les verdicts d’identité sont laissés à un module distinct.
+- Le collecteur est conçu pour les entrées Windows de la session active; les sessions sécurisées et certains périphériques/comportements peuvent ne pas produire des mesures comparables.
+- Les performances de reconnaissance (FAR, FRR, EER) ne peuvent être calculées qu’après création d’un protocole avec des personnes consentantes, des sessions séparées et des exemples d’autres utilisateurs.
+
+## Références de comparaison
+
+Le benchmark CMU rapporte une EER de 9,62 % pour Manhattan mis à l’échelle dans son protocole de frappe; le challenge KVC rapporte 3,33 % pour ses meilleurs modèles desktop sur un large corpus. Ces taux concernent des systèmes de comparaison d’identité et des jeux de données spécifiques. Le présent mode apprend et stocke des mesures sans comparer une session à un profil; ces pourcentages ne sont donc pas directement comparables.
+
+## Sources techniques
+
+- [Windows Raw Input](https://learn.microsoft.com/en-us/windows/win32/inputdev/using-raw-input) pour recevoir les événements des périphériques.
+- [Windows Hello visage](https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/windows-hello-face-authentication) pour l’authentification par caméra infrarouge compatible.
+- [Windows Biometric Framework](https://learn.microsoft.com/en-us/windows/win32/secbiomet/biometric-framework-overview) pour les API système d’identification et de vérification biométrique.
+- [Benchmark CMU de frappe](https://www.cs.cmu.edu/~keystroke/) et [challenge KVC](https://arxiv.org/abs/2401.16559) pour les comparaisons de taux d’erreur publiés.
