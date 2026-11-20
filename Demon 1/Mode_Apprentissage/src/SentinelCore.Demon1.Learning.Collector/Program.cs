@@ -4,10 +4,10 @@ using System.Text.Json;
 using System.Windows.Forms;
 using SentinelCore.Demon1.Learning;
 
-internal static class Program
+public static class CollectorRuntime
 {
     [STAThread]
-    private static int Main(string[] args)
+    public static int Run(string[] args)
     {
         try
         {
@@ -32,24 +32,28 @@ internal static class Program
     {
         var database = Need(o, "db"); var sid = Need(o, "sid"); var context = Need(o, "context");
         var statusPath = Need(o, "status"); var stopPath = Need(o, "stop");
-        if (o.GetValueOrDefault("owner-confirmed") != "true") throw new InvalidOperationException("Le mode apprentissage exige une confirmation explicite du propriétaire.");
+        var ticket = Need(o, "auth-ticket"); var proof = Need(o, "auth-proof");
+        if (!OneTimeAuthorizationTicket.Consume(ticket, proof, sid))
+            throw new InvalidOperationException("Authentification absente, expirée ou invalide. Démarre la collecte depuis la fenêtre SentinelCore.");
+        var idleLimitSeconds = int.TryParse(o.GetValueOrDefault("idle-seconds", "90"), out var idleArg) ? Math.Clamp(idleArg, 30, 900) : 90;
+        var windowSeconds = int.TryParse(o.GetValueOrDefault("window-seconds", "15"), out var windowArg) ? Math.Clamp(windowArg, 10, 60) : 15;
         using var repository = new SqliteLearningProfileRepository(database);
         var service = new LearningModeService(repository);
         var ignorePid = int.TryParse(o.GetValueOrDefault("ignore-pid"), out var parsedPid) ? parsedPid : 0;
-        var collector = new RawInputLearningCollector(context, ignorePid);
+        var collector = new RawInputLearningCollector(context, ignorePid, windowSeconds);
         collector.Start();
         Console.WriteLine("CAPTURE_ACTIVE");
         IReadOnlyDictionary<string, double> latestMeasures = new Dictionary<string, double>();
 
         using var statusTimer = new System.Windows.Forms.Timer { Interval = 1000 };
-        using var windowTimer = new System.Windows.Forms.Timer { Interval = 15_000 };
+        using var windowTimer = new System.Windows.Forms.Timer { Interval = windowSeconds * 1000 };
         statusTimer.Tick += (_, _) =>
         {
             if (File.Exists(stopPath)) { statusTimer.Stop(); windowTimer.Stop(); Application.ExitThread(); return; }
-            if (GetIdleSeconds() >= 90)
+            if (GetIdleSeconds() >= idleLimitSeconds)
             {
                 statusTimer.Stop(); windowTimer.Stop(); collector.Stop();
-                WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), false, "Collecte arrêtée après 90 secondes sans interaction. Redémarre-la manuellement.", latestMeasures);
+                WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), false, $"Collecte arrêtée après {idleLimitSeconds} secondes sans interaction. Redémarre-la manuellement.", latestMeasures);
                 Application.ExitThread();
                 return;
             }
@@ -121,9 +125,18 @@ internal static class Program
             latestMeasures,
             note
         };
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(payload));
-        File.Move(temp, path, true);
+        // The controller reads this file while the collector updates it. Replacing an
+        // existing file with MoveFileEx can fail with ERROR_ACCESS_DENIED on Windows
+        // when another reader/AV briefly holds the destination open. Share read/write
+        // access and truncate in place; readers already retry malformed partial JSON.
+        var json = JsonSerializer.Serialize(payload);
+        using var stream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write,
+            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.WriteThrough);
+        stream.SetLength(0);
+        using var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false), 4096, leaveOpen: true);
+        writer.Write(json);
+        writer.Flush();
+        stream.Flush(flushToDisk: true);
     }
 
     private static double GetIdleSeconds()
@@ -149,7 +162,7 @@ internal static class Program
         return result;
     }
     private static string Need(Dictionary<string, string> options, string name) => options.TryGetValue(name, out var value) ? value : throw new ArgumentException($"Argument --{name} manquant.");
-    private static void PrintHelp() => Console.WriteLine("SentinelCore Learning Collector\n  collect --db PATH --sid SID --context CONTEXT --status PATH --stop PATH --owner-confirmed\n  list --db PATH --sid SID [--take 50]");
+    private static void PrintHelp() => Console.WriteLine("SentinelCore Learning Collector\n  collect --db PATH --sid SID --context CONTEXT --status PATH --stop PATH --auth-ticket PATH --auth-proof TOKEN\n  list --db PATH --sid SID [--take 50]");
 }
 
 internal sealed record CollectedWindow(IReadOnlyDictionary<string, double> Features, double Quality);
@@ -157,7 +170,7 @@ internal sealed record CollectorSnapshot(int WindowSeconds, int KeyPresses, int 
 
 internal sealed class RawInputLearningCollector
 {
-    private const int WindowSeconds = 15;
+    private readonly int _windowSeconds;
     private readonly RawInputWindow _window;
     private DateTimeOffset _windowStarted = DateTimeOffset.UtcNow;
     private readonly List<double> _dwell = [];
@@ -175,14 +188,15 @@ internal sealed class RawInputLearningCollector
     private long _lastMouseAt;
     private int _pendingKeys;
 
-    public RawInputLearningCollector(string context, int ignorePid)
+    public RawInputLearningCollector(string context, int ignorePid, int windowSeconds)
     {
+        _windowSeconds = Math.Clamp(windowSeconds, 10, 60);
         _window = new RawInputWindow(OnKeyboard, OnMouse, ignorePid);
     }
     public void Start() => _window.Start();
     public void Stop() => _window.Stop();
 
-    public CollectorSnapshot Snapshot() => new(WindowSeconds, Volatile.Read(ref _keyPresses), Volatile.Read(ref _mouseMoves), Volatile.Read(ref _clicks), Volatile.Read(ref _pendingKeys));
+    public CollectorSnapshot Snapshot() => new(_windowSeconds, Volatile.Read(ref _keyPresses), Volatile.Read(ref _mouseMoves), Volatile.Read(ref _clicks), Volatile.Read(ref _pendingKeys));
 
     public CollectedWindow TakeWindow()
     {
