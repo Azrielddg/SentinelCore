@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SentinelCore.Demon2.Core/SentinelCore.Demon2.Core.csproj" />
+    <Project Path="src/SentinelCore.Demon2.Service/SentinelCore.Demon2.Service.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SentinelCore.Demon2.Tests/SentinelCore.Demon2.Tests.csproj" />
+  </Folder>
+</Solution>
