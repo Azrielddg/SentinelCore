@@ -1,0 +1,34 @@
+# Démon 1 — validation et identité visuelle locale
+
+Cette partie compare le comportement récent au profil sélectionné, puis, sur demande liée à une alerte, peut comparer le visage à un des profils visuels enregistrés. Elle ne prend pas la décision de risque finale et ne lance pas d’action.
+
+## Fonctionnement
+
+- `SentinelCore.Demon1.Validation` compare les mesures comportementales aux mesures apprises et signale une divergence à D3 si la qualité des données le permet.
+- `SentinelCore.Demon1.VisualVerification` capture environ 5 secondes quand D3 demande une vérification, cherche un seul visage, produit un gabarit SFace, vérifie la présence réelle avec MiniFASNetV2, puis compare aux profils visuels. OpenCvSharp 5 exécute aussi le réseau anti-usurpation localement sur CPU.
+- D1 renvoie uniquement un statut à trois valeurs, les mesures de qualité, le profil candidat éventuel, un code de motif et une référence d’image. Il n’envoie jamais les images, les frappes ou les gabarits à D2.
+- Les gabarits et les preuves locales sont chiffrés avec DPAPI. D3 peut demander des morceaux de la preuve en utilisant `VISUAL_EVIDENCE_READ_REQUEST`; il l’intègre au rapport avant purge locale.
+- Après activation et enrôlement dans les paramètres, les demandes d’alerte ne déclenchent pas une boîte de dialogue répétée. La caméra ne tourne pas continuellement.
+
+## Installation des modèles et démarrage
+
+Dans PowerShell, depuis le dossier `Demon 1` :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Mode_Validation\Modeles\Download-Models.ps1
+dotnet build .\SentinelCore.Demon1.slnx --configuration Release
+```
+
+Le premier script télécharge YuNet, SFace et MiniFASNetV2 vers `%LOCALAPPDATA%\SentinelCore\Demon1Learning\models`, puis vérifie leur SHA-256. Les poids ONNX ne sont pas suivis dans Git. Les références, licences et limites figurent dans `Modeles/README.md` et `COMPARAISON_SOLUTIONS.md`.
+
+Ouvrir ensuite la fenêtre de contrôle du mode apprentissage. Choisir un profil, saisir le mot de passe maître et utiliser « Enrôler le visage ». Dans Paramètres, activer « Autoriser le contrôle visuel demandé par le démon 3 ». « Simuler une alerte visuelle » permet une vérification locale manuelle.
+
+## Interface inter-démons
+
+Le transport demeure la propriété de D3, qui héberge `\\.\pipe\SentinelCore.Guard`; le nouveau `InterDaemonPipeClient` de D1 s’y connecte en local. Il utilise une longueur little-endian suivie d’un message JSON, limite les messages à 64 KiB, réalise HELLO/WELCOME, envoie un heartbeat toutes les 10 secondes, exige les ACK, retente trois fois au plus et rejette types/version/expirations inattendus. D1 envoie `USER_CONTEXT` pendant la collecte et `BEHAVIOR_DEVIATION` uniquement si l’évaluation faite **avant la mise à jour du profil** dépasse le seuil. Il répond aussi à `CONTEXT_REQUEST`, `VISUAL_IDENTITY_REQUEST` et `VISUAL_EVIDENCE_READ_REQUEST`. D3 doit activer ces types dans sa liste autorisée; seul D3 décide du risque et des actions. L’attente visuelle peut durer jusqu’à 60 secondes, sans suspendre l’évaluation urgente de D2. Voir `CONTRAT_VISUEL_D1_D3.txt`.
+
+Quand la fenêtre D1 est ouverte, elle tente de se connecter au Named Pipe de D3, effectue le HELLO/WELCOME, envoie un heartbeat et répond aux demandes visuelles/contexte. Le contexte et les divergences ne sont publiés que pendant une collecte d’apprentissage explicitement démarrée. Cette branche ne transforme pas encore le contrôleur en service Windows démarré à chaque ouverture de session; fermer la fenêtre coupe donc ce client D1. D3 doit implémenter les types ajoutés dans le contrat partagé et intégrer les preuves au rapport.
+
+## Prudence de mesure
+
+Le seuil SFace 0,363 vient d’un benchmark public LFW; ce n’est ni un taux de fiabilité SentinelCore ni une probabilité. Le score est seulement un indice de similarité. Le seuil et le contrôle de présence doivent être évalués sur des sessions séparées par jour et par utilisateur. Une capture absente ou ambiguë doit rester `INDETERMINATE`.

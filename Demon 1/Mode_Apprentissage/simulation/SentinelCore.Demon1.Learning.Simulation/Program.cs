@@ -1,6 +1,13 @@
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
 using SentinelCore.Demon1.Learning;
+using SentinelCore.Demon1.Learning.Controller;
+
+if (args.Length == 2 && args[0] == "--collector-smoke")
+{
+    await RunCollectorSmoke(args[1]);
+    return;
+}
 
 var databasePath = Path.Combine(Path.GetTempPath(), $"sentinelcore-learning-sim-{Guid.NewGuid():N}.db");
 using var repository = new SqliteLearningProfileRepository(databasePath);
@@ -76,3 +83,61 @@ static IReadOnlyDictionary<string, double> SampleFeatures(int i) => new Dictiona
     ["mouse.curvature_median"] = .40 + (i % 3) * .05,
     ["mouse.click_interval_median_ms"] = 600 + (i % 4) * 10
 };
+
+static async Task RunCollectorSmoke(string appExe)
+{
+    if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Ce contrôle nécessite Windows.");
+    if (!File.Exists(appExe)) throw new FileNotFoundException("Application publiée introuvable.", appExe);
+    var sid = System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value;
+    var root = Path.Combine(Path.GetTempPath(), $"sentinelcore-collector-smoke-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(root);
+    var authRoot = Path.Combine(root, "auth-check"); var auth = new AuthStore(authRoot);
+    const string testPassword = "SentinelCore-Test-Only-Password-2026";
+    auth.SetPassword(testPassword);
+    if (!auth.VerifyPassword(testPassword) || auth.VerifyPassword(testPassword + "wrong")) throw new InvalidDataException("L’enregistrement ou la vérification du mot de passe maître a échoué.");
+    var authFileText = File.ReadAllText(Path.Combine(authRoot, "auth.bin"));
+    if (authFileText.Contains(testPassword, StringComparison.Ordinal)) throw new InvalidDataException("Le mot de passe maître apparaît en clair dans son fichier.");
+    var database = Path.Combine(root, "learning.db"); var status = Path.Combine(root, "status.json"); var stop = Path.Combine(root, "stop.signal");
+    var ticket = Path.Combine(root, "ticket.bin");
+    File.WriteAllText(status, "existing status to exercise replacement");
+    var proof = OneTimeAuthorizationTicket.Create(ticket, sid);
+    var start = new ProcessStartInfo(appExe) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+    foreach (var arg in new[] { "--worker", "collect", "--db", database, "--sid", sid, "--context", "SMOKE_TEST", "--status", status, "--stop", stop, "--auth-ticket", ticket, "--auth-proof", proof, "--window-seconds", "10", "--idle-seconds", "30", "--ignore-pid", Environment.ProcessId.ToString() }) start.ArgumentList.Add(arg);
+    using var worker = Process.Start(start) ?? throw new InvalidOperationException("Le collecteur n’a pas démarré.");
+    var deadline = DateTime.UtcNow.AddSeconds(15);
+    var activeSeen = false;
+    while (!activeSeen && DateTime.UtcNow < deadline)
+    {
+        if (worker.HasExited) break;
+        try
+        {
+            using var state = System.Text.Json.JsonDocument.Parse(File.ReadAllText(status));
+            activeSeen = state.RootElement.TryGetProperty("active", out var active) && active.GetBoolean();
+        }
+        catch (IOException) { }
+        catch (System.Text.Json.JsonException) { }
+        await Task.Delay(200);
+    }
+    if (!activeSeen) throw new TimeoutException("Le collecteur n’a pas écrit son état actif dans status.json.");
+    await Task.Delay(1200);
+    File.WriteAllText(stop, "stop");
+    if (!worker.WaitForExit(10000)) { worker.Kill(entireProcessTree: true); throw new TimeoutException("Le collecteur n’a pas répondu au signal d’arrêt."); }
+    var errors = await worker.StandardError.ReadToEndAsync();
+    if (worker.ExitCode != 0) throw new InvalidOperationException($"Le collecteur a échoué ({worker.ExitCode}) : {errors}");
+    using var finalStatus = System.Text.Json.JsonDocument.Parse(File.ReadAllText(status));
+    if (!finalStatus.RootElement.TryGetProperty("active", out _)) throw new InvalidDataException("Le JSON d’état final n’a pas le champ active.");
+    if (File.Exists(ticket)) throw new InvalidDataException("Le ticket d’autorisation à usage unique n’a pas été consommé.");
+    var deniedTicket = Path.Combine(root, "denied-ticket.bin"); var deniedProof = OneTimeAuthorizationTicket.Create(deniedTicket, sid);
+    var deniedStatus = Path.Combine(root, "denied-status.json"); var deniedStop = Path.Combine(root, "denied-stop.signal");
+    var deniedStart = new ProcessStartInfo(appExe) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+    foreach (var arg in new[] { "--worker", "collect", "--db", database, "--sid", sid, "--context", "SMOKE_TEST", "--status", deniedStatus, "--stop", deniedStop, "--auth-ticket", deniedTicket, "--auth-proof", deniedProof + "x", "--window-seconds", "10", "--idle-seconds", "30" }) deniedStart.ArgumentList.Add(arg);
+    using var deniedWorker = Process.Start(deniedStart) ?? throw new InvalidOperationException("Le scénario de preuve invalide n’a pas démarré.");
+    if (!deniedWorker.WaitForExit(10000)) { deniedWorker.Kill(entireProcessTree: true); throw new TimeoutException("Le scénario de preuve invalide a expiré."); }
+    if (deniedWorker.ExitCode == 0 || File.Exists(deniedStatus)) throw new InvalidDataException("Une preuve invalide a pu démarrer la collecte.");
+    Console.WriteLine("OK — l’EXE a consommé son ticket et démarré le collecteur.");
+    Console.WriteLine("OK — status.json préexistant a été réécrit sans erreur d’accès.");
+    Console.WriteLine("OK — l’arrêt manuel a terminé le processus et le JSON final est lisible.");
+    Console.WriteLine("OK — une preuve incorrecte est refusée sans démarrer de collecte.");
+    Console.WriteLine("OK — le mot de passe maître est vérifié et son fichier ne contient pas le secret en clair.");
+    Console.WriteLine($"Base temporaire de validation : {root}");
+}

@@ -1,64 +1,72 @@
-# Mode apprentissage — démon 1
+# Démon 1 — mode apprentissage
 
-Ce dossier contient le premier mode utilisable du démon 1 : une collecte démarrée manuellement, le calcul de mesures de clavier/souris, la création progressive du profil et l’enregistrement dans SQLite.
+## Lancer l’application
 
-## Démarrer la fenêtre de contrôle
+L’application de contrôle Windows se trouve après publication dans `artifacts/win-x64/SentinelCore.Demon1.Learning.Controller.exe`. Double-clique sur ce fichier pour ouvrir la fenêtre de suivi. Elle ne démarre jamais la collecte automatiquement.
 
-Ouvre PowerShell, puis lance le fichier :
+Pour reconstruire le fichier exécutable depuis la racine du dépôt :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File ".\Demon 1\Mode_Apprentissage\Controler-Apprentissage.ps1"
+.\Demon 1\Mode_Apprentissage\build-release.ps1
 ```
 
-Le script n’active aucune collecte au démarrage. Dans son menu, choisis **1** et confirme que tu es le propriétaire. Les choix **2**, **3** et **4** servent respectivement à suivre les mesures, consulter la base et arrêter la collecte. Quitter le menu arrête la collecte si tu le confirmes. La collecte s’arrête aussi automatiquement après 90 secondes sans interaction; il faut alors la redémarrer manuellement.
+Le script PowerShell `Controler-Apprentissage.ps1` est maintenant un simple lanceur de l’EXE; toute la configuration et le suivi se font dans la fenêtre.
 
-Le collecteur fonctionne seulement pendant cette période manuellement démarrée. Il n’est pas installé en service et ne se lance pas automatiquement avec Windows.
+## Autoriser une étude
 
-## Ce qui est réellement recueilli
+À la première ouverture, la fenêtre demande de créer le mot de passe maître (12 caractères minimum). Seule une empreinte PBKDF2 salée est stockée; le fichier est en plus chiffré avec DPAPI pour le compte Windows courant.
 
-Windows Raw Input fournit les signaux de clavier/souris. Le collecteur travaille sur des périodes de 15 secondes. Il calcule des rythmes et durées : fréquence de frappe, durée d’appui, intervalle entre frappes, pauses, vitesse et variations de la souris, changements de direction et intervalle entre clics. Il ne garde pas le texte tapé. Les codes de touche sont utilisés temporairement en mémoire pour mesurer le temps d’appui, puis abandonnés.
+Pour commencer une session, l’utilisateur doit réussir soit l’invite de vérification Windows Hello, soit la vérification du mot de passe maître, puis confirmer explicitement le démarrage. Si Hello échoue ou est annulé, aucune collecte ne commence. Le collecteur exige aussi un ticket protégé DPAPI à usage unique, valable 30 secondes, remis par le contrôleur après authentification.
 
-Les événements utilisés dans la fenêtre PowerShell sont exclus du profil pour éviter que les commandes de contrôle n’apprennent les touches de suivi elles-mêmes. Les fenêtres sans assez d’activité sont ignorées. Une période utile doit atteindre une qualité minimale de 0,80.
+Dans une application desktop .NET, l’intégration utilise l’API Windows `UserConsentVerifierInterop` liée à la fenêtre propriétaire. Windows décide quel fournisseur est disponible/configuré (visage, empreinte, PIN Hello); SentinelCore ne reçoit pas la donnée biométrique. La disponibilité réelle dépend du PC et des paramètres Windows Hello.
 
-La collecte ne décide pas qui est devant l’écran. Au démarrage, l’utilisateur confirme manuellement « je suis le propriétaire ». Cette confirmation n’est pas une reconnaissance faciale ni Windows Hello. Le module de comparaison d’identité reste séparé.
+## Paramètres et suivi
 
-## Cycle du profil
+La fenêtre permet :
 
-- `NO_PROFILE` : aucun échantillon reçu.
-- `CALIBRATING` : collecte des périodes acceptées.
-- `PROVISIONAL` : au moins 20 périodes réparties sur 3 jours.
-- `READY` : au moins 60 périodes sur 7 jours, avec au moins 30 périodes clavier et 30 souris dans le même contexte.
-- `FROZEN` : le profil est gelé après réception d’un signal de menace par le service d’apprentissage.
+- de lancer l’apprentissage via Windows Hello ou le mot de passe maître;
+- d’arrêter la collecte manuellement;
+- de suivre l’état et les dernières mesures en temps réel;
+- de consulter les 200 dernières périodes enregistrées;
+- de modifier la période de mesure (10–60 s) et l’arrêt après inactivité (30–900 s);
+- de configurer jusqu’à huit profils et de choisir le profil auquel rattacher une session d’apprentissage;
+- de voir un résumé des programmes souvent au premier plan, des heures observées et de leur utilisation médiane du CPU/de la mémoire;
+- de changer le mot de passe maître après vérification de l’ancien.
 
-Ces valeurs sont les réglages initiaux. Le collecteur présent n’est pas encore relié au démon 2; en fonctionnement isolé, il ne reçoit donc pas de signal réel de menace.
+La base est enregistrée dans `%LOCALAPPDATA%\SentinelCore\Demon1Learning\learning.db`. Les profils et mesures sont chiffrés par DPAPI par compte utilisateur Windows. Le mot de passe maître et les empreintes sont enregistrés dans `auth.bin`, également protégé DPAPI. Les préférences générales sont dans `settings.json`.
 
-## Enregistrement et consultation
+Dans la fenêtre « Voir la base », les dates, contextes, états, décisions et noms des mesures sont présentés en français. Les noms techniques de tables/colonnes et les identifiants internes restent stables pour préserver la compatibilité avec le code et les anciennes bases.
 
-La base active est créée ici : `%LOCALAPPDATA%\SentinelCore\Demon1Learning\learning.db`. Elle est propre au compte Windows. Les mesures et les profils sont chiffrés avec la protection Windows du compte courant avant leur inscription dans SQLite. La fenêtre PowerShell peut relire les dernières périodes, les déchiffrer localement et afficher les statistiques; elle ne montre ni texte tapé ni image.
+## Données collectées
 
-Le code de la base est dans `SqliteLearningProfileRepository.cs`; le collecteur Windows est dans `src/SentinelCore.Demon1.Learning.Collector`; la fenêtre de contrôle manuelle est `Controler-Apprentissage.ps1`.
+Le collecteur Windows Raw Input agrège les événements par période : fréquence de frappe, durée d’appui, intervalle et pauses entre frappes, vitesse/accélération/curvature de la souris et intervalles de clic. Les codes de touches n’existent qu’en mémoire le temps de calculer une durée d’appui; aucun caractère ni texte n’est écrit dans le profil. Les mesures comportementales des profils 1 à 8 sont séparées par identifiant de contexte dans la base. Pendant une collecte, le collecteur observe aussi une fois par seconde le processus de premier plan, son CPU/sa mémoire et la mémoire utilisée par le système, puis enregistre une synthèse par période dans SQLite chiffrée par DPAPI. Les noms de fenêtre, commandes lancées et contenus ne sont pas collectés par D1.
 
-## Mesures de cette version
+Le système exclut les événements quand la fenêtre SentinelCore est active, n’enregistre pas de mesure clavier/souris si l’activité est insuffisante et interrompt la collecte après le délai d’inactivité configuré. Les horaires, applications de premier plan et ressources sont collectés par profil. La validation comportementale compare clavier/souris; le module visuel local (YuNet/SFace/MiniFASNetV2), l’enrôlement par profil et les payloads D1→D3 sont également présents. Le choix automatique du profil, la connexion continue au pipe résident D3 et l’intégration complète de la preuve au rapport demeurent à construire.
 
-Compilation de la solution : réussite, 0 avertissement et 0 erreur. Simulation de l’apprentissage SQLite : 70/70 périodes confirmées acceptées et 2/2 périodes non admissibles écartées (une provenance injectée, une période sans confirmation du propriétaire). La simulation a écrit 322 périodes dans SQLite, puis en a relu et déchiffré 5 pour l’affichage. Débit local observé : environ 50 périodes/seconde en mode Release avec chiffrement DPAPI et SQLite. À une période collectée toutes les 15 secondes, cela représente environ 750 fois le débit requis dans cette simulation.
+## Structure
 
-Les deux taux de 100 % sont ceux de règles d’admission testées sur des cas synthétiques; ils ne représentent pas le taux de reconnaissance du propriétaire. Le débit mesuré est très supérieur au rythme réel (une période toutes les 15 secondes), mais il ne valide pas encore le bon fonctionnement de chaque clavier, souris, session à distance ou condition matérielle.
+- `src/SentinelCore.Demon1.Learning` : profils, règles d’admission, SQLite, DPAPI et ticket de démarrage à usage unique.
+- `src/SentinelCore.Demon1.Learning.Collector` : collecte Windows clavier/souris et écriture de l’état.
+- `src/SentinelCore.Demon1.Learning.Controller` : interface WinForms, mot de passe maître, Windows Hello, paramètres et contrôles.
+- `simulation` : simulation de calibration et test de fumée du collecteur publié.
+- `fonctionnement.txt` : explication simple, exemples et comportement attendu.
 
-## Limites à garder en tête
+La branche de travail est `feature/demon-1-validation`. Le contrôleur, l’apprentissage et la validation restent dans le dossier de ce module.
 
-- Windows Hello peut gérer la connexion par visage sur les appareils dotés d’une caméra infrarouge compatible, mais son modèle facial est géré par Windows et n’est pas fourni à ce module. Le contrôle actuel utilise une confirmation manuelle du propriétaire.
-- Aucun visage n’est encore enregistré dans cette base.
-- La comparaison visuelle, la détection de présence réelle et les verdicts d’identité sont laissés à un module distinct.
-- Le collecteur est conçu pour les entrées Windows de la session active; les sessions sécurisées et certains périphériques/comportements peuvent ne pas produire des mesures comparables.
-- Les performances de reconnaissance (FAR, FRR, EER) ne peuvent être calculées qu’après création d’un protocole avec des personnes consentantes, des sessions séparées et des exemples d’autres utilisateurs.
+## Vérification effectuée
 
-## Références de comparaison
+- `dotnet build Demon 1/SentinelCore.Demon1.slnx --configuration Release` : réussi sur l’état courant, 0 avertissement et 0 erreur (21 novembre 2026).
+- Publication autonome `win-x64` en fichier unique : réussie.
+- Simulation d’apprentissage synthétique : 70/70 périodes admissibles acceptées et 2/2 périodes inadmissibles rejetées; 322 périodes SQLite persistées et relues. Ces pourcentages évaluent uniquement les règles sur des données synthétiques, pas la reconnaissance du propriétaire.
+- Test fumée du collecteur publié : un `status.json` déjà présent a été mis à jour, le ticket a été consommé une fois, l’arrêt a été appliqué, puis le JSON final a été relu. Une preuve incorrecte a été refusée et un test temporaire a vérifié que le mot de passe maître fonctionne sans apparaître en clair dans le fichier. L’exception d’accès montrée auparavant n’est pas réapparue.
+- Lancement UI : l’EXE s’ouvre et affiche la configuration initiale. La création du mot de passe et l’invite biométrique sont laissées à l’utilisateur; ces invites sensibles ne sont pas automatisées.
 
-Le benchmark CMU rapporte une EER de 9,62 % pour Manhattan mis à l’échelle dans son protocole de frappe; le challenge KVC rapporte 3,33 % pour ses meilleurs modèles desktop sur un large corpus. Ces taux concernent des systèmes de comparaison d’identité et des jeux de données spécifiques. Le présent mode apprend et stocke des mesures sans comparer une session à un profil; ces pourcentages ne sont donc pas directement comparables.
+Le taux de faux rejet/faux acceptation du futur module de validation n’est pas mesurable avec ce module d’apprentissage seul. La collecte terrain (durées, variations d’appareils et qualité des mesures) reste à évaluer sur des sessions choisies par le propriétaire.
 
-## Sources techniques
+## Documentation Windows
 
-- [Windows Raw Input](https://learn.microsoft.com/en-us/windows/win32/inputdev/using-raw-input) pour recevoir les événements des périphériques.
-- [Windows Hello visage](https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/windows-hello-face-authentication) pour l’authentification par caméra infrarouge compatible.
-- [Windows Biometric Framework](https://learn.microsoft.com/en-us/windows/win32/secbiomet/biometric-framework-overview) pour les API système d’identification et de vérification biométrique.
-- [Benchmark CMU de frappe](https://www.cs.cmu.edu/~keystroke/) et [challenge KVC](https://arxiv.org/abs/2401.16559) pour les comparaisons de taux d’erreur publiés.
+- [Windows Raw Input](https://learn.microsoft.com/en-us/windows/win32/inputdev/using-raw-input)
+- [Windows Hello face authentication](https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/windows-hello-face-authentication)
+- [UserConsentVerifier et vérification dans une application desktop](https://learn.microsoft.com/en-us/uwp/api/windows.security.credentials.ui.userconsentverifier)
+- [Interop WinRT pour les applications .NET desktop](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/winrt-com-interop-csharp)
+- [Windows Biometric Framework](https://learn.microsoft.com/en-us/windows/win32/secbiomet/biometric-framework-overview)

@@ -1,0 +1,37 @@
+FONCTIONNEMENT DU MODE VALIDATION — EXPLICATION SIMPLE
+
+1. Comparer les habitudes de clavier et de souris
+Le module prend un petit résumé des mouvements et le compare aux habitudes apprises pour le profil choisi. Il ne garde pas les phrases tapées. Il répond « cohérent », « différent » ou « pas assez d’informations ».
+
+Exemple : D2 signale un téléchargement inhabituel. D1 constate que la personne tape et utilise la souris comme d’habitude, mais reconnaît aussi que Cline vient d’être lancé. D1 apporte ce contexte à D3. Si D1 voit une grande différence avec le profil, il le signale. D3 garde quand même l’alerte technique de D2 pour prendre la décision finale.
+
+2. Profils séparés
+Dans Paramètres, le propriétaire choisit de 1 à 8 profils. Avant une collecte, il sélectionne le profil de la personne qui va utiliser le PC. Chaque profil a ses propres périodes de clavier/souris et ses habitudes d’applications.
+
+Exemple : le matin, Alice choisit PROFIL_1 et lance sa collecte; le soir, Bob choisit PROFIL_2. Leurs habitudes ne sont pas mélangées. Pour l’instant, on choisit le profil dans la fenêtre : le programme ne devine pas encore tout seul le nom de la personne.
+
+3. Habitudes de travail et des applications
+Pendant une collecte authentifiée, le programme note quelle application est devant, à quelle heure, combien de temps elle reste visible et une estimation de sa mémoire et de son processeur. Il garde ces résumés chiffrés.
+
+Exemple : Alice ouvre souvent Visual Studio et un terminal vers 9 h. Elle travaille parfois avec Cline. Si le terminal lance une série de tâches, D1 peut expliquer à D3 que l’application et l’heure ont déjà été observées dans le profil. Ce contexte ne prouve pas qu’un téléchargement est sûr. Le système garde au plus 5 000 périodes récentes pour ce résumé; il lui faut plusieurs périodes pour parler d’une habitude, sinon il répond que l’historique est insuffisant.
+
+4. Enrôler les visages
+Dans la fenêtre du démon 1, sélectionner un profil, choisir « Enrôler le visage », puis saisir le mot de passe maître et accepter l’enregistrement de cinq secondes. Le visage est détecté, vérifié par un contrôle de présence réelle, puis résumé en un gabarit chiffré propre à ce profil.
+
+Exemple : Alice enregistre son visage pour PROFIL_1; Bob peut faire la même chose pour PROFIL_2. Cela ne crée pas une photo accessible à tout programme : le gabarit est gardé dans les données privées SentinelCore et protégé par Windows.
+
+5. Vérification après une alerte
+La caméra ne tourne pas en permanence. Quand le contrôle visuel est activé dans Paramètres, D3 peut demander une vérification à D1 après une alerte, un soupçon ou pour préparer un rapport. La capture prend environ cinq secondes; le délai total autorisé peut aller jusqu’à une minute. Après configuration, il n’y a pas de demande de confirmation répétée à chaque alerte.
+
+Exemple : D2 détecte un script qui télécharge beaucoup de fichiers. D3 continue d’évaluer le danger et demande en même temps à D1 qui utilise l’ordinateur. D1 compare plusieurs images au profil Alice et applique un modèle qui repère certaines présentations imprimées ou affichées sur écran. C’est un indice de présence, pas une preuve infaillible contre une vidéo truquée ou une caméra virtuelle. Le résultat revient à D3 sous forme « correspond », « ne correspond pas » ou « indéterminé ».
+
+6. Photo du rapport et messages entre les démons
+D1 ne communique pas directement avec D2 et ne lance aucune action de sécurité. D3 héberge le tuyau local sécurisé. Il envoie à D1 une demande VISUAL_IDENTITY_REQUEST avec un identifiant d’affaire et une échéance. D1 répond par VISUAL_IDENTITY_RESPONSE avec le résultat et un numéro de preuve. L’image reste chiffrée chez D1; si D3 prépare le rapport, il demande cette preuve par petits morceaux, puis intègre une copie dans le rapport.
+
+Exemple : D3 assemble l’alerte de téléchargement de D2, le contexte de travail de D1 et le résultat de présence. Le rapport peut montrer la photo liée à l’affaire. Reconnaître Alice ne supprime pas l’alerte du téléchargement : D3 décide en tenant compte des deux sources.
+
+7. Résultats sûrs en cas de doute
+Une caméra absente, un visage flou, une photo suspectée, une échéance dépassée ou des profils non configurés produisent « indéterminé ». Le programme ne transforme jamais ce cas en « propriétaire reconnu ».
+
+8. Ce qui est disponible et ce qui reste à intégrer
+Le collecteur contextuel, la configuration de 1 à 8 profils, l’analyse visuelle locale, l’enrôlement, le chiffrement DPAPI et les messages typés sont dans la branche du démon 1. Le démon 3 doit encore brancher les nouveaux types au tuyau commun et assembler la preuve dans son rapport. Le seuil de reconnaissance doit ensuite être calibré avec plusieurs utilisateurs, webcams et jours différents avant toute revendication de performance.

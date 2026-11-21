@@ -1,110 +1,73 @@
-FONCTIONNEMENT DU MODE APPRENTISSAGE — DEMON 1
+MODE APPRENTISSAGE DU DÉMON 1 — COMMENT ÇA FONCTIONNE
 
-À quoi sert ce mode ?
----------------------
-Il apprend peu à peu le rythme habituel de l’utilisateur devant le PC. Il enregistre des résumés du clavier et de la souris dans une base SQLite locale. La fenêtre PowerShell permet de démarrer et arrêter cet apprentissage, de suivre les dernières mesures et de consulter la base.
+Ce fichier explique avec des mots simples les fonctions déjà présentes et ce qui reste à raccorder. D1 observe les habitudes de travail et apporte du contexte à D3. D2 observe les menaces techniques; D3 garde la décision finale.
 
-Il ne cherche pas encore à dire qui est devant la caméra. La reconnaissance du visage, la comparaison avec le propriétaire et le verdict seront traités dans un module séparé.
+1. Ouvrir la fenêtre de contrôle — disponible
 
-1. Ouvrir la fenêtre de contrôle
---------------------------------
-L’apprentissage n’est pas lancé automatiquement. Pour ouvrir la fenêtre de contrôle, l’utilisateur lance le script PowerShell fourni dans ce dossier. Le menu propose :
-- démarrer l’apprentissage après confirmation du propriétaire ;
-- suivre en direct le nombre de frappes, les mouvements de souris et les mesures calculées ;
-- afficher les dernières lignes de la base de données ;
-- arrêter la collecte.
+La fenêtre ne commence pas à collecter au simple lancement. Elle affiche l’état, les réglages, les données de la base et les habitudes d’applications.
 
-Exemple : l’utilisateur ouvre la fenêtre, choisit « Démarrer », confirme qu’il est le propriétaire, puis travaille normalement. S’il choisit « Arrêter », le collecteur cesse de recevoir les entrées.
+Exemple : si tu ouvres la fenêtre seulement pour consulter les mesures de la veille, aucune nouvelle période n’est enregistrée.
 
-La collecte ne fonctionne que tant que le collecteur démarré manuellement reste actif. S’il n’y a aucune interaction pendant 90 secondes, il s’arrête pour ne pas continuer à apprendre sur un PC laissé sans surveillance. Pour reprendre, il faut redémarrer manuellement. Le programme ne s’installe pas en service Windows et ne se lance pas au démarrage de l’ordinateur.
+2. Créer et utiliser le mot de passe maître — disponible
 
-2. Observer le clavier et la souris sans garder le texte
--------------------------------------------------------
-Le collecteur demande à Windows des signaux d’utilisation du clavier et de la souris. Il les regroupe par périodes de 15 secondes. Les lettres et les mots ne sont pas enregistrés.
+Au premier lancement, SentinelCore demande un mot de passe maître. Pour commencer chaque séance d’apprentissage, il faut le mot de passe maître ou la vérification Windows Hello, puis confirmer le démarrage. La collecte s’arrête après une durée sans activité ou avec le bouton Arrêter.
 
-Pour mesurer la durée d’appui, le code de la touche est gardé temporairement en mémoire entre son appui et son relâchement. Le programme calcule la durée, puis oublie ce code. Les mouvements de souris servent temporairement à calculer la vitesse et les changements de direction; les coordonnées brutes ne sont pas écrites dans la base.
+Exemple : tu choisis 90 secondes d’inactivité. Si tu quittes le PC et ne touches ni souris ni clavier pendant ce temps, le collecteur s’arrête.
 
-Exemple de résumé d’une période :
-- environ 70 frappes par minute ;
-- durée médiane d’appui : 100 ms ;
-- délai médian entre les frappes : 150 ms ;
-- vitesse médiane de souris : valeur calculée à partir des déplacements ;
-- intervalle médian entre clics : 600 ms.
+3. Apprendre les habitudes clavier/souris — disponible
 
-Les frappes faites dans la fenêtre PowerShell de contrôle sont exclues du profil. Cela évite que l’utilisateur apprenne au système les touches qu’il vient de taper pour utiliser le menu.
+Pendant une séance, D1 calcule des résumés : rythme de frappe, durée des appuis, pauses, vitesse et changements de direction de la souris, rythme des clics. Les caractères des phrases ne sont pas conservés; les mesures sont regroupées par période et chiffrées dans la base locale.
 
-3. Décider si une période est assez complète
---------------------------------------------
-Chaque période doit contenir des mesures reconnues, des nombres valides et une qualité suffisante. Une période trop vide ne modifie pas le profil.
+Exemple : D1 peut garder « rythme moyen proche de 120 touches par minute » sans garder la phrase écrite dans l’éditeur ou le mot de passe saisi.
 
-Exemple : si l’utilisateur ne bouge presque pas la souris et ne tape que deux touches en 15 secondes, la période n’est pas assez riche pour entraîner le profil. Le contrôle en direct peut quand même montrer les compteurs de la période.
+4. Organiser plusieurs utilisateurs — disponible, sélection manuelle
 
-4. Confirmer que l’apprentissage concerne le propriétaire
----------------------------------------------------------
-Avant le démarrage, PowerShell demande une confirmation manuelle que l’utilisateur est le propriétaire. Le programme reçoit cette confirmation comme une consigne de départ.
+Dans Paramètres, le propriétaire peut créer de 1 à 8 profils. Avant de commencer une séance, il sélectionne le profil correspondant. Les mesures clavier/souris, les applications observées et le visage enrôlé sont associés à ce profil.
 
-Cette confirmation ne prouve pas le visage de la personne. Windows Hello et la caméra ne sont pas appelés dans cette version. L’apprentissage ne commence donc pas encore après une authentification biométrique automatique.
+Exemple : Alice sélectionne PROFIL_1 le matin; Bob sélectionne PROFIL_2 le soir. Leurs données restent séparées. Aujourd’hui, l’application ne choisit pas automatiquement Alice ou Bob : la sélection se fait dans la fenêtre.
 
-5. Construire le profil progressivement
----------------------------------------
-Les périodes acceptées alimentent des profils séparés selon le contexte, par exemple le type général de clavier et de souris. Le système ne mélange pas volontairement des contextes différents dans un même profil.
+5. Apprendre les horaires, applications et ressources — première version disponible
 
-Pour chaque mesure, il garde les 256 dernières valeurs et calcule des résumés, comme la valeur centrale et l’étendue observée. Ces résumés décrivent ce qui a été appris. Le mode apprentissage ne compare pas une nouvelle session au profil et ne donne aucun verdict; cette comparaison sera faite par l’autre module.
+Pendant une séance autorisée, D1 observe une fois par seconde le nom du programme au premier plan, l’heure, le jour, le temps visible estimé, sa mémoire et son CPU quand Windows fournit la mesure. Il relève aussi la mémoire totale utilisée par l’ordinateur. Les résumés sont chiffrés dans la base. D1 ne lit pas les titres de fenêtres, lignes de commande, textes affichés ou fichiers ouverts.
 
-Exemple : si les périodes montrent entre 65 et 80 frappes par minute, le résumé de la base indiquera cette zone habituelle. Si une période à 500 frappes par minute arrive alors que le propriétaire a confirmé l’apprentissage et que les capteurs sont fiables, elle sera enregistrée elle aussi. Le mode apprentissage n’a pas encore la responsabilité de dire que cet écart est normal ou suspect.
+Exemple : D1 peut apprendre que Visual Studio Code et un terminal sont souvent utilisés entre 9 h et 11 h, et que l’éditeur utilise généralement une certaine quantité de mémoire. Cela aide à expliquer le contexte, mais ne prouve pas qu’une commande est sûre.
 
-6. Comprendre la progression
-----------------------------
-Le profil suit ces étapes :
-- `NO_PROFILE` : rien n’a encore été appris ;
-- `CALIBRATING` : les premières périodes sont recueillies ;
-- `PROVISIONAL` : au moins 20 périodes acceptées sur au moins 3 jours ;
-- `READY` : au moins 60 périodes sur au moins 7 jours, avec au moins 30 périodes clavier et 30 souris ;
-- `FROZEN` : le service reçoit un signal de menace et cesse de modifier le profil.
+6. Consulter la base et les habitudes — disponible
 
-Exemple : 60 périodes en une seule journée ne suffisent pas. Le profil doit couvrir plusieurs jours et contenir assez de signaux des deux périphériques.
+« Voir la base » affiche les périodes enregistrées. « Voir habitudes » regroupe les applications par fréquence, heures et ressources médianes. Les données sensibles sont protégées par Windows (DPAPI) pour le compte courant.
 
-Les seuils sont des réglages initiaux. Le collecteur actuel n’est pas encore branché au démon 2; il ne reçoit donc pas encore de vrais signaux de menace.
+Exemple : tu peux voir que le terminal apparaît souvent autour de 10 h et consomme d’habitude une quantité semblable de mémoire. Les commandes tapées n’apparaissent pas.
 
-7. Enregistrer et consulter la base
------------------------------------
-La base est créée dans le dossier local de l’utilisateur Windows : `%LOCALAPPDATA%\SentinelCore\Demon1Learning\learning.db`. Elle est au format SQLite.
+7. Comprendre l’évaluation comportementale — moteur disponible, intégration continue à raccorder
 
-Le profil et les valeurs mesurées sont chiffrés avant d’être mis dans la base. Quand on choisit « Voir la base », le programme les lit et les déchiffre localement pour les afficher dans PowerShell. La base ne contient pas les lettres tapées ni les coordonnées brutes de la souris.
+Le module de validation compare un résumé récent clavier/souris au profil. Il peut répondre « cohérent », « différent » ou « données insuffisantes ». Il utilise un indice de divergence : 60 est un seuil de signalement, pas 60 % de probabilité d’attaque. Ce seuil n’a pas encore été calibré sur suffisamment de vraies séances et de personnes.
 
-Exemple : la fenêtre montre l’heure de la période, si elle a été acceptée ou mise de côté, l’état de progression et un résumé comme `typing.rate: 72`.
+Exemple : une personne utilise un autre clavier et tape plus lentement. Le module peut signaler une différence ou manquer de données; D3 doit alors garder l’incertitude au lieu de conclure automatiquement à une attaque.
 
-8. Ce que montrent les résultats mesurés
-----------------------------------------
-La compilation de la solution réussit avec zéro avertissement et zéro erreur. La simulation a placé 70 périodes confirmées sur 70 dans le profil et écarté deux périodes non admissibles sur deux : une entrée signalée comme injectée et une période sans confirmation du propriétaire. Elle a enregistré 322 périodes dans SQLite et en a relu 5 pour vérifier l’affichage. Le débit observé est d’environ 50 périodes par seconde en mode Release. Comme une période est recueillie toutes les 15 secondes (environ 0,067 par seconde), cela représente environ 750 fois le débit requis dans cette simulation.
+8. Donner du contexte à D3 — disponible quand le collecteur tourne et que D3 est lancé
 
-Les 100 % sont les résultats des règles dans une simulation fabriquée. Ils ne disent pas que l’apprentissage reconnaîtra le propriétaire à 100 %. Le débit mesure le traitement des résumés et leur enregistrement; il ne mesure pas la fiabilité des capteurs.
+D1 se connecte au Named Pipe de D3 avec HELLO/WELCOME et un heartbeat. Pendant une collecte autorisée, il envoie des payloads `USER_CONTEXT` pour résumer le programme au premier plan, l’heure, la mémoire et le CPU; en cas de divergence, il ajoute aussi ce contexte au payload `BEHAVIOR_DEVIATION`. D3 héberge le Named Pipe sécurisé et reçoit ces messages. Le démon 2 n’obtient pas les gabarits, images, mesures détaillées de frappe ou souris. Si D3 n’est pas lancé, D1 continue localement et réessaie la connexion.
 
-9. Windows Hello et le visage
------------------------------
-Windows Hello peut gérer la connexion par visage sur un PC équipé d’une caméra infrarouge compatible. Windows garde son modèle facial dans son environnement biométrique protégé. Une application peut demander une vérification du propriétaire, mais ne reçoit pas le modèle facial de Hello pour le réutiliser dans son propre apprentissage.
+Exemple : D2 repère qu’un agent télécharge beaucoup de fichiers. D1 indique à D3 que le terminal et l’agent de code apparaissent souvent dans les séances habituelles. D3 conserve l’alerte de téléchargement et décide du risque avec les deux informations.
 
-Pour ce projet, la bonne première option est de demander à Windows Hello de vérifier le propriétaire, puis d’utiliser le résultat comme confirmation. Le mode apprentissage actuel utilise encore une confirmation manuelle. Il n’enregistre aucune photo ni vidéo du visage.
+9. Enrôler les visages et vérifier lors d’une alerte — moteur disponible, raccord D3 à terminer
 
-10. Ce qui est fait et ce qui reste à faire
--------------------------------------------
-Déjà codé :
-- démarrage et arrêt manuels depuis un menu PowerShell ;
-- collecte Windows Raw Input du clavier et de la souris ;
-- calcul de mesures de rythme par périodes de 15 secondes ;
-- exclusion des entrées utilisées dans la fenêtre de contrôle ;
-- profil progressif et filtre de qualité ;
-- base SQLite locale avec protection Windows des mesures et du profil ;
-- consultation des périodes stockées depuis le menu PowerShell ;
-- simulation et mesure du débit.
+Le propriétaire choisit le profil, saisit le mot de passe maître et accepte une courte capture lors de l’enrôlement. D1 crée un gabarit facial chiffré localement. Dans les paramètres, la vérification visuelle peut être activée. Ensuite, quand D3 envoie une demande après un soupçon ou pour un rapport, D1 capture environ cinq secondes sans redemander une confirmation à chaque alerte. Le délai total peut aller jusqu’à une minute.
 
-Pas encore codé :
-- démarrage de l’apprentissage après une véritable vérification Windows Hello ;
-- enrôlement ou comparaison du visage, photo ou vidéo ;
-- connexion du signal de menace réel du démon 2 ;
-- comparaison d’identité et verdict, qui appartiennent à l’autre module ;
-- validation sur les habitudes réelles et mesure des erreurs de reconnaissance.
+Exemple : D2 envoie à D3 une alerte de téléchargement inattendu. D3 évalue déjà cette alerte et demande en parallèle à D1 une vérification. YuNet détecte le visage, SFace le compare aux profils, MiniFASNetV2 cherche des signes de photo ou de vidéo rejouée. D1 répond « MATCH », « NO_MATCH » ou « INDETERMINATE ». Reconnaître le propriétaire n’efface jamais l’alerte technique de D2.
 
-Conclusion
-----------
-Le mode réalise maintenant une collecte de rythme réelle, démarrée à la demande, affiche son activité dans PowerShell et enregistre des résumés dans une base SQLite protégée. Il est prêt pour un essai contrôlé de collecte, mais ses performances de reconnaissance du propriétaire ne sont pas mesurées parce que ce module ne fait pas encore de reconnaissance.
+10. Ajouter une photo au rapport — mécanisme préparé, raccord final à D3 nécessaire
+
+La photo retenue est conservée chiffrée par DPAPI sous une référence opaque. Elle ne traverse pas le pipe en un gros fichier : D3 la demande par petits morceaux, l’assemble et intègre sa propre copie au rapport. Effacer plus tard la preuve source ne doit pas effacer une photo déjà incorporée dans un rapport.
+
+Exemple : le rapport d’incident conserve l’image capturée même si la copie temporaire locale a été purgée selon la politique qui sera définie.
+
+11. Que faire si la caméra ou les données manquent ?
+
+Si la caméra est absente, l’image floue, aucun visage unique détecté, le profil absent ou l’échéance dépassée, D1 répond `INDETERMINATE`. Il ne transforme jamais une erreur en reconnaissance du propriétaire.
+
+Exemple : l’écran est sombre ou deux personnes passent devant la caméra; D1 envoie « indéterminé », et D3 continue sa décision à partir des informations de D2.
+
+12. État actuel du projet
+
+La collecte et les réglages d’apprentissage, les résumés d’applications, le moteur local de comparaison visuelle, l’enrôlement par profil, le chiffrement des gabarits et preuves et le client du pipe D1↔D3 sont dans la branche du démon 1. La compilation Release réussit. Le démarrage permanent du démon D1 comme service, l’intégration finale dans le rapport de D3, les essais webcam réels et le calibrage statistique restent à faire.

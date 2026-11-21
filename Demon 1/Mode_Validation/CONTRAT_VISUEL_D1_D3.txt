@@ -1,0 +1,23 @@
+EXTENSION V1 — VÉRIFICATION VISUELLE D1 ↔ D3
+
+Propriétaires : D3 héberge le Named Pipe \..\pipe\SentinelCore.Guard et reste seul décideur/actionneur. D1 ne se connecte qu'à travers l'adaptateur inter-démons déjà défini. D2 ne reçoit ni image, ni nom de profil, ni gabarit, ni biométrie.
+
+1. Déclenchement
+D3 envoie VISUAL_IDENTITY_REQUEST à D1 après suspicion/alerte, avec correlationId, requestedAtUtc, deadlineUtc (au plus 60 secondes), purpose enum (ALERT, SUSPICION, REPORT) et requiredLiveness=true. D1 accepte seulement si l'option caméra est activée, un profil visuel est configuré et le délai n'est pas expiré. Après activation initiale dans les paramètres, il n'y a pas de boîte de dialogue à chaque requête. La caméra ne tourne pas en continu.
+
+2. Réponse
+D1 renvoie VISUAL_IDENTITY_RESPONSE avec la même correlationId : status=MATCH|NO_MATCH|INDETERMINATE, profileId nullable, liveness=LIVE|SPOOF_SUSPECTED|INDETERMINATE, similarity nullable, faceQuality 0..1, validFrames, observedAtUtc, evidenceRef nullable, reasonCode et expiresAtUtc. Les valeurs inconnues restent inconnues; un timeout donne INDETERMINATE. Un MATCH aide à évaluer qui est devant l'écran; il ne neutralise jamais une alerte technique D2.
+
+3. Photo pour le rapport
+Le JPEG ne passe pas dans un payload JSON de 64 KiB. D1 conserve une copie chiffrée DPAPI derrière un identifiant aléatoire evidenceRef. D3 peut demander l'image pour le rapport via VISUAL_EVIDENCE_READ_REQUEST {evidenceRef, offset, maxBytes<=24576}; D1 valide le format de référence et renvoie VISUAL_EVIDENCE_CHUNK {evidenceRef, offset, totalBytes, chunkBase64, isFinal}. Chaque message reste sous 64 KiB. D3 assemble et intègre l'image dans le rapport; une copie incluse dans un rapport existant reste dans ce rapport même si la preuve source est ensuite purgée.
+
+4. Sécurité et délais
+Les nouvelles demandes et réponses respectent l'enveloppe v1, IDs, expiration et déduplication. Ces messages sont une exception au délai de contexte ordinaire de 2 secondes; seul le flux VISUAL_IDENTITY utilise l'échéance explicitement fournie, plafonnée à 60 secondes. Le pipe reste protégé par ACL et authentification de la source. Une référence invalide, une demande non autorisée ou une image manquante est rejetée sans accès au système de fichiers arbitraire.
+
+5. Implémentation attendue côté D3
+- inscrire les trois messageType dans l'allowlist;
+- corréler la réponse à la demande sans bloquer les règles urgentes;
+- journaliser délai/état et poursuivre le traitement D2 en parallèle;
+- limiter le transfert d'image à une demande explicite D3 et aux références créées par D1;
+- incorporer l'image au rapport avant toute purge;
+- ne jamais transformer un résultat visuel en ordre d'action.

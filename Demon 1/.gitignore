@@ -1,4 +1,5 @@
 **/bin/
 **/obj/
+Mode_Apprentissage/artifacts/
 .vs/
 *.user
