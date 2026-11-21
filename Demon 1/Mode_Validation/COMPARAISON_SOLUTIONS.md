@@ -9,10 +9,10 @@ La vérification visuelle est déclenchée par un soupçon ou une alerte. Elle n
 | Option | Ce qu’elle sait faire | Atouts pour SentinelCore | Limites à vérifier | Avis |
 |---|---|---|---|---|
 | Windows Hello | Authentifie un compte Windows avec la biométrie ou le PIN configuré dans Windows | Matériel et anti-usurpation gérés par Windows; bon facteur de réauthentification | L’application reçoit un résultat d’authentification, pas le gabarit facial ni un score de comparaison avec les profils SentinelCore | Garder comme signal facultatif de réauthentification; ce n’est pas notre moteur multiutilisateur |
-| OpenCV Zoo YuNet + SFace | Détecte/aligne un visage puis calcule une représentation pour comparer des visages | Exécution locale; modèles ONNX; intégration .NET avec OpenCvSharp4; YuNet est sous MIT et SFace sous Apache-2.0 dans leurs dossiers de modèle OpenCV Zoo | SFace seul ne prouve pas la présence réelle; seuil d’un benchmark public à calibrer; les mainteneurs discutent encore de la provenance des données d’entraînement du modèle | Meilleur compromis actuel pour le prototype local, avec notice de licence et validation terrain |
+| OpenCV Zoo YuNet + SFace | Détecte/aligne un visage puis calcule une représentation pour comparer des visages | Exécution locale; modèles ONNX; intégration .NET avec OpenCvSharp5; YuNet est sous MIT et SFace sous Apache-2.0 dans leurs dossiers de modèle OpenCV Zoo | SFace seul ne prouve pas la présence réelle; seuil d’un benchmark public à calibrer; les mainteneurs discutent encore de la provenance des données d’entraînement du modèle | Prototype retenu pour comparer les profils; l’acceptation propriétaire reste à valider sur cette webcam |
 | DeepFace | Cadre Python qui expose plusieurs modèles de comparaison faciale | Facile à expérimenter et comparer; licence MIT pour le code du cadre | Les licences des poids et dépendances varient; déploiement plus lourd en Python; comparer un visage n’est pas un contrôle de présence | Utile pour le banc d’essai, pas mon premier choix pour le binaire Windows final |
 | InsightFace | Détection, alignement et reconnaissance faciale de haute qualité | Écosystème riche et très utilisé pour les expériences | Le code MIT ne confère pas automatiquement les droits sur les poids pré-entraînés; les modèles publics sont indiqués comme non commerciaux/recherche par défaut | Ne pas embarquer les poids publics sans autorisation/licence adaptée |
-| Silent-Face-Anti-Spoofing | Classe une image de caméra comme visage réel ou présentation potentiellement fausse | Code Apache-2.0; ajoute une brique spécialisée pour repérer certaines photos/écrans | Projet et démonstration surtout orientés Android; performances annoncées par le dépôt et sensibles au capteur/scénario; ne donne pas l’identité | À évaluer comme brique anti-usurpation séparée, jamais comme preuve absolue |
+| Silent-Face-Anti-Spoofing / MiniFASNetV2 | Classe une image de caméra comme visage réel ou présentation potentiellement fausse | Code d’inférence local, petit modèle ONNX, traitement CPU; classe 1 = réel dans la référence amont | Résultats sensibles au capteur, au cadrage et aux attaques; l’essai sur cette webcam a rejeté l’utilisateur malgré 14/14 images avec visage | Candidat installé, mais bloquant pour l’enrôlement sur le PC testé; ne pas baisser son seuil sans mesure d’attaques |
 
 ## Comparaison du comportement et du contexte
 
@@ -27,9 +27,9 @@ L’approche recommandée est une fusion locale : D1 apprend l’usage habituel,
 
 ## Choix recommandé
 
-1. Garder Windows Hello comme vérification native facultative du propriétaire du compte.
-2. Faire un prototype local YuNet + SFace pour comparer les profils configurés, après vérification écrite de la licence des poids distribués.
-3. Évaluer séparément un détecteur de présentation (photo papier, écran de téléphone, vidéo rejouée). Tant qu’il n’est pas testé sur notre matériel, D1 renvoie `liveness=UNKNOWN`.
+1. Utiliser l’authentification faciale locale SentinelCore comme premier choix visuel et garder le mot de passe maître comme solution de repli. Cette branche ne demande pas Windows Hello, qui sur le PC de test renvoie au mot de passe Windows.
+2. Utiliser YuNet + SFace pour comparer les profils configurés, après vérification écrite de la licence des poids distribués.
+3. Mesurer un détecteur de présentation sur le PC cible. Tant que le liveness n’est pas confirmé, D1 renvoie `INDETERMINATE` et n’ouvre pas par le visage.
 4. Ne pas télécharger automatiquement des modèles au premier lancement. Versionner le nom, la somme SHA-256, la source, la licence et la version de chaque modèle livré.
 5. Garder un statut à trois valeurs : `MATCH`, `NO_MATCH`, `INDETERMINATE`. Le seuil est appris/mesuré sur des sessions distinctes; aucune valeur de similarité brute ne devient une probabilité.
 
@@ -49,13 +49,23 @@ Les pourcentages ci-dessous sont une **estimation de couverture du besoin Sentin
 
 Ces chiffres indiquent quelle option convient le mieux au cahier des charges; ils ne signifient pas « 84 % de personnes reconnues correctement ». Une mesure de qualité devra utiliser un jeu local séparé par jour et par personne, publier FAR/FRR/EER, seuils, cas impossibles et conditions de caméra.
 
+## Mesures réelles sur le PC cible — 21 novembre 2026
+
+Le compte rendu détaillé est dans `ESSAIS_REELS_D1.md`. Sur les deux captures d’enrôlement où l’utilisateur a indiqué être devant la webcam, le profil a été refusé par MiniFASNetV2 (`ENROLLMENT_LIVENESS_NOT_CONFIRMED`) : **0 enrôlement réussi sur 2 tentatives**. Lors du dernier essai, YuNet a détecté un visage sur **14 images sur 14** (taille maximale 152 px), mais le score de présence moyenne était 0,035 et le maximum 0,493. Le moteur n’a donc jamais exécuté la comparaison du propriétaire; le taux MATCH et le taux de précision sont **non mesurés**, pas 0 %.
+
+Les refus caméra absente, visage absent et présence non confirmée sont tous restés `INDETERMINATE`; aucune fausse identité n’a été acceptée dans ces essais. Cette observation mesure le refus prudent du pipeline sur les cas testés, pas son taux de détection des attaques.
+
+Une analyse d’un fork maintenu de MiniFASNet rapporte, sur son évaluation de 2 992 images CelebA-Spoof, 46,3 % d’APCER pour photos/écrans et 6,6 % de BPCER; les chiffres sont propres à son protocole et ne prédisent pas les résultats de cette webcam. Elle montre néanmoins qu’il faut mesurer chaque classe d’attaque et le faux rejet au lieu de reprendre un taux d’accuracy global. [Analyse technique et limites](https://github.com/doranteseduardo/MiniFASNet/blob/master/docs/limitations.md).
+
+Un candidat à comparer en mode expérimental est MiniFASNetV2-SE de Facenox : entrée 128×128 RGB, deux classes, résultat annoncé de 98,20 % sur son test CelebA-Spoof. C’est un résultat sur le jeu annoncé par son auteur, pas une garantie inter-caméra; il faut vérifier le prétraitement, la licence des poids et le résultat sur le PC avant remplacement. [Dépôt et métriques publiées](https://github.com/facenox/face-antispoof-onnx), [version du modèle](https://github.com/facenox/face-antispoof-onnx/releases).
+
 ## Choix technique retenu dans cette branche
 
 - **YuNet** : détecte un visage et fournit cinq repères. Le modèle YuNet 2023mar reste adapté à OpenCV 4.x; son entrée est de taille fixe. Le dépôt OpenCV Zoo indique MIT pour le dossier du modèle.
 - **SFace** : calcule un vecteur de comparaison après alignement. Le modèle `face_recognition_sface_2021dec.onnx` est annoncé Apache-2.0 dans OpenCV Zoo. La somme SHA-256 est contrôlée par le script de récupération. Des questions publiques existent toutefois sur la provenance des données d’entraînement : conserver l’attribution, ne pas revendiquer une certification juridique et réévaluer si SentinelCore est commercialisé.
 - **MiniFASNetV2** : classe la séquence comme vraie présence ou tentative d’image/relecture. Le code d’inférence ONNX de Yakhyo est sous Apache-2.0 et indique la classe 1 comme « Real ». Le projet dérive de Silent-Face-Anti-Spoofing. Ce contrôle est un indice, pas une garantie contre une attaque vidéo sophistiquée.
 - **OpenCvSharp5.Windows** : wrapper .NET local sur OpenCV 5 qui expose FaceDetectorYN, FaceRecognizerSF et DNN/ONNX. MiniFASNet tourne dans le même moteur CPU : pas besoin du paquet Microsoft ONNX Runtime de 176 Mo qui avait été envisagé pendant le prototype. Le projet épingle la version du paquet et OpenCV rappelle de libérer ses objets natifs avec `Dispose`.
-- **Windows Hello** : reste une autre manière de confirmer le compte Windows, pas l’identification faciale des profils SentinelCore. Ses gabarits biométriques ne sont pas livrés à l’application.
+- **Windows Hello** : ses gabarits biométriques ne sont pas livrés à l’application. Le code de cette branche n’utilise pas Hello; il demande une comparaison locale YuNet/SFace et conserve le mot de passe maître comme repli.
 
 Le seuil SFace 0,363 cité par OpenCV correspond à un protocole LFW. Le code le fournit uniquement comme seuil provisoire configurable; il n’est ni un seuil final ni un score de risque.
 
@@ -90,4 +100,4 @@ Si la demande expire, D3 reçoit `INDETERMINATE/TIMEOUT`; l’absence de caméra
 
 ## Décision d’implémentation
 
-La reconnaissance visuelle ne doit pas être mise en production sur la base de la seule popularité GitHub. Le branchement de prototype est codé et les poids sont récupérés avec somme de contrôle; il reste à valider les seuils sur le matériel cible et à mesurer les faux rejets/acceptations. Comme une minute de latence est acceptable, cette étape reste hors du chemin critique de la décision technique D2.
+La reconnaissance visuelle ne doit pas être mise en production sur la base de la seule popularité GitHub. Le branchement de prototype est codé et les poids sont récupérés avec somme de contrôle. Les essais du 21 novembre ont détecté le visage, mais MiniFASNetV2 a refusé le liveness sur deux tentatives d’enrôlement; aucun vrai MATCH propriétaire ni NO_MATCH d’une autre personne n’a donc été observé. La prochaine étape est un test A/B contrôlé d’un modèle liveness alternatif sur des captures vivantes puis sur des attaques papier/écran. La vérification visuelle reste hors du chemin critique D2; le mot de passe maître reste disponible.
