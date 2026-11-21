@@ -1,0 +1,3 @@
+# Machine-learning weights are fetched by the pinned, hash-verifying script.
+Demon 1/Mode_Validation/Modeles/*.onnx
+Demon 1/Mode_Validation/Modeles/*.download

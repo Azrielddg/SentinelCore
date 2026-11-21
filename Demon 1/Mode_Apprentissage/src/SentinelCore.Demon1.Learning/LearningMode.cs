@@ -164,7 +164,7 @@ internal static class CurrentUserDpapi
 public sealed class LearningModeService(ILearningProfileRepository repository)
 {
     private const int MaxSamplesPerFeature = 256;
-    private const int MaxContextsPerProfile = 8;
+    private const int MaxContextsPerProfile = 256;
     private const int ProvisionalWindows = 20;
     private const int ProvisionalDays = 3;
     private const int ReadyWindows = 60;

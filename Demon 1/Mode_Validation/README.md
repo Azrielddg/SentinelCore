@@ -1,30 +1,34 @@
-# Démon 1 — validation comportementale
+# Démon 1 — validation et identité visuelle locale
 
-## Objectif de cette première tranche
+Cette partie compare le comportement récent au profil sélectionné, puis, sur demande liée à une alerte, peut comparer le visage à un des profils visuels enregistrés. Elle ne prend pas la décision de risque finale et ne lance pas d’action.
 
-Comparer une période agrégée de clavier/souris au profil propriétaire construit par `Mode_Apprentissage`. Cette bibliothèque calcule un **indice de divergence** et un niveau de complétude/confiance des données. Elle ne collecte pas d’entrées, ne nomme pas une autre personne, n’exécute pas de mesures de réponse et ne contacte pas directement le démon 3.
+## Fonctionnement
 
-## Règle de comparaison
+- `SentinelCore.Demon1.Validation` compare les mesures comportementales aux mesures apprises et signale une divergence à D3 si la qualité des données le permet.
+- `SentinelCore.Demon1.VisualVerification` capture environ 5 secondes quand D3 demande une vérification, cherche un seul visage, produit un gabarit SFace, vérifie la présence réelle avec MiniFASNetV2, puis compare aux profils visuels. OpenCvSharp 5 exécute aussi le réseau anti-usurpation localement sur CPU.
+- D1 renvoie uniquement un statut à trois valeurs, les mesures de qualité, le profil candidat éventuel, un code de motif et une référence d’image. Il n’envoie jamais les images, les frappes ou les gabarits à D2.
+- Les gabarits et les preuves locales sont chiffrés avec DPAPI. D3 peut demander des morceaux de la preuve en utilisant `VISUAL_EVIDENCE_READ_REQUEST`; il l’intègre au rapport avant purge locale.
+- Après activation et enrôlement dans les paramètres, les demandes d’alerte ne déclenchent pas une boîte de dialogue répétée. La caméra ne tourne pas continuellement.
 
-- Le profil doit être `READY`; sinon le résultat est `INCONCLUSIVE` et code `PROFILE_NOT_READY`.
-- La qualité de la période doit atteindre 0,80.
-- Au moins deux mesures clavier et deux mesures souris doivent être disponibles; les données absentes ne sont jamais remplacées par un score neutre.
-- Chaque mesure est comparée à la médiane du profil. L’échelle robuste prend la plus grande valeur entre MAD, IQR et une petite limite plancher, pour éviter une division par zéro. Les valeurs à moins d’un écart robuste valent 0; à quatre écarts ou plus, 100; entre les deux, l’indice monte linéairement.
-- Les mesures clavier et souris pèsent chacune 50 %, pour éviter qu’un groupe avec plus de champs prenne tout le poids.
-- `BEHAVIOR_DIFFERENT` est émis si l’indice dépasse 60 et que la qualité des données suffit. Ce 60 est un indice de divergence, **pas une probabilité d’intrusion**.
+## Installation des modèles et démarrage
 
-La formule est un prototype heuristique et `IsEmpiricallyValidated` reste `false`. Il ne faut pas présenter le seuil comme une précision acquise tant qu’il n’a pas été évalué sur des sessions réelles séparées par jour/utilisateur, avec FAR, FRR et EER.
+Dans PowerShell, depuis le dossier `Demon 1` :
 
-## Ce que « distinguer deux utilisateurs » signifie pour l’instant
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Mode_Validation\Modeles\Download-Models.ps1
+dotnet build .\SentinelCore.Demon1.slnx --configuration Release
+```
 
-Le résultat compare une personne active au profil propriétaire. Il peut dire « comportement cohérent », « comportement différent » ou « données insuffisantes ». Il ne peut pas dire « c’est l’utilisateur B » : il n’existe pas encore de profils nommés séparés pour plusieurs personnes.
+Le premier script télécharge YuNet, SFace et MiniFASNetV2 vers `%LOCALAPPDATA%\SentinelCore\Demon1Learning\models`, puis vérifie leur SHA-256. Les poids ONNX ne sont pas suivis dans Git. Les références, licences et limites figurent dans `Modeles/README.md` et `COMPARAISON_SOLUTIONS.md`.
 
-Le collecteur actuel apprend le profil lié au compte Windows et considère toute période capturée pendant une collecte propriétaire comme donnée propriétaire. Si une deuxième personne manipule le PC pendant cette collecte, ses mesures peuvent donc contaminer le profil. Avant une mesure de validation honnête, le profil propriétaire doit être gelé et les périodes de la deuxième personne doivent être recueillies séparément et étiquetées comme échantillons de validation, jamais ajoutées à l’apprentissage propriétaire.
+Ouvrir ensuite la fenêtre de contrôle du mode apprentissage. Choisir un profil, saisir le mot de passe maître et utiliser « Enrôler le visage ». Dans Paramètres, activer « Autoriser le contrôle visuel demandé par le démon 3 ». « Simuler une alerte visuelle » permet une vérification locale manuelle.
 
-## Contrat avec le démon 3
+## Interface inter-démons
 
-Si `ShouldNotifyDemon3` est vrai, `ToDemon3Payload` produit un payload `BEHAVIOR_DEVIATION` version 1, expirant après 30 secondes. Le démon 3 l’enveloppera avec les IDs et métadonnées du contrat inter-démons commun, puis utilisera son Named Pipe. Le champ `confidence` décrit uniquement la complétude/qualité des données et la maturité du profil; il n’est pas une probabilité. Le payload comprend les sous-scores clavier/souris, reason codes, aucune frappe brute et aucune référence de preuve par défaut. Le démon 3 reste l’unique propriétaire du Named Pipe, de la décision de risque finale et des actions.
+Le transport demeure la propriété de D3, qui héberge `\\.\pipe\SentinelCore.Guard`; le nouveau `InterDaemonPipeClient` de D1 s’y connecte en local. Il utilise une longueur little-endian suivie d’un message JSON, limite les messages à 64 KiB, réalise HELLO/WELCOME, envoie un heartbeat toutes les 10 secondes, exige les ACK, retente trois fois au plus et rejette types/version/expirations inattendus. D1 envoie `USER_CONTEXT` pendant la collecte et `BEHAVIOR_DEVIATION` uniquement si l’évaluation faite **avant la mise à jour du profil** dépasse le seuil. Il répond aussi à `CONTEXT_REQUEST`, `VISUAL_IDENTITY_REQUEST` et `VISUAL_EVIDENCE_READ_REQUEST`. D3 doit activer ces types dans sa liste autorisée; seul D3 décide du risque et des actions. L’attente visuelle peut durer jusqu’à 60 secondes, sans suspendre l’évaluation urgente de D2. Voir `CONTRAT_VISUEL_D1_D3.txt`.
 
-## Limites et prochaine étape
+Quand la fenêtre D1 est ouverte, elle tente de se connecter au Named Pipe de D3, effectue le HELLO/WELCOME, envoie un heartbeat et répond aux demandes visuelles/contexte. Le contexte et les divergences ne sont publiés que pendant une collecte d’apprentissage explicitement démarrée. Cette branche ne transforme pas encore le contrôleur en service Windows démarré à chaque ouverture de session; fermer la fenêtre coupe donc ce client D1. D3 doit implémenter les types ajoutés dans le contrat partagé et intégrer les preuves au rapport.
 
-Cette première tranche prend un `LearningReport` déjà construit et une période déjà agrégée. Elle n’est pas encore branchée au collecteur continu ni au Named Pipe. Prochaine étape : un adaptateur qui lit le profil propriétaire sans l’adapter pendant l’évaluation, envoie un `BEHAVIOR_DEVIATION` via l’interface de communication commune, puis collecte volontairement des sessions distinctes de propriétaire et de second utilisateur pour régler/mesurer le seuil.
+## Prudence de mesure
+
+Le seuil SFace 0,363 vient d’un benchmark public LFW; ce n’est ni un taux de fiabilité SentinelCore ni une probabilité. Le score est seulement un indice de similarité. Le seuil et le contrôle de présence doivent être évalués sur des sessions séparées par jour et par utilisateur. Une capture absente ou ambiguë doit rester `INDETERMINATE`.

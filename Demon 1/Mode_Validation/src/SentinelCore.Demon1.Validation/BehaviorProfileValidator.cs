@@ -27,7 +27,24 @@ public sealed record BehaviorDeviationSignals(
     [property: JsonPropertyName("liveness")] string Liveness = "NOT_IMPLEMENTED",
     [property: JsonPropertyName("inputOrigin")] string InputOrigin = "NOT_PROVIDED",
     [property: JsonPropertyName("sessionType")] string SessionType = "NOT_PROVIDED",
-    [property: JsonPropertyName("rawKeystrokesStored")] bool RawKeystrokesStored = false);
+    [property: JsonPropertyName("rawKeystrokesStored")] bool RawKeystrokesStored = false,
+    [property: JsonPropertyName("applicationContext")] ApplicationContextSignal? ApplicationContext = null);
+
+public sealed record ApplicationContextSignal(
+    [property: JsonPropertyName("profileId")] string ProfileId,
+    [property: JsonPropertyName("observedAtUtc")] DateTimeOffset ObservedAtUtc,
+    [property: JsonPropertyName("ageSeconds")] int AgeSeconds,
+    [property: JsonPropertyName("foregroundApplication")] string ForegroundApplication,
+    [property: JsonPropertyName("foregroundSeconds")] int ForegroundSeconds,
+    [property: JsonPropertyName("localHour")] int LocalHour,
+    [property: JsonPropertyName("localDayOfWeek")] int LocalDayOfWeek,
+    [property: JsonPropertyName("seenInLearnedHistory")] bool? SeenInLearnedHistory,
+    [property: JsonPropertyName("hourCommonForApplication")] bool? HourCommonForApplication,
+    [property: JsonPropertyName("cpuPercent")] double? CpuPercent,
+    [property: JsonPropertyName("memoryMiB")] double? MemoryMiB,
+    [property: JsonPropertyName("systemMemoryUsedPercent")] double? SystemMemoryUsedPercent,
+    [property: JsonPropertyName("sampleCount")] int SampleCount,
+    [property: JsonPropertyName("reasonCode")] string ReasonCode);
 
 /// <summary>Payload only; the Demon 3 host adds the common message envelope/IDs and transports it.</summary>
 public sealed record BehaviorDeviationPayload(
@@ -44,6 +61,13 @@ public sealed record BehaviorDeviationPayload(
     [property: JsonPropertyName("evidenceRefs")] IReadOnlyList<string> EvidenceRefs,
     [property: JsonPropertyName("expiresAtUtc")] DateTimeOffset ExpiresAtUtc);
 
+public sealed record UserContextPayload(
+    [property: JsonPropertyName("schemaVersion")] int SchemaVersion,
+    [property: JsonPropertyName("observedAtUtc")] DateTimeOffset ObservedAtUtc,
+    [property: JsonPropertyName("sessionId")] string SessionId,
+    [property: JsonPropertyName("applicationContext")] ApplicationContextSignal ApplicationContext,
+    [property: JsonPropertyName("expiresAtUtc")] DateTimeOffset ExpiresAtUtc);
+
 /// <summary>
 /// Compares one aggregated observation with an already learned owner profile.
 /// The score is a divergence index, never a probability or a named-user identity claim.
@@ -57,7 +81,8 @@ public sealed class BehaviorProfileValidator
     private const int ExpectedMouseFeatures = 4;
     private const int SamplesForFullMaturity = 60;
 
-    public BehaviorDeviationPayload? ToDemon3Payload(BehaviorAssessment assessment, string sid, string sessionId)
+    public BehaviorDeviationPayload? ToDemon3Payload(BehaviorAssessment assessment, string sid, string sessionId,
+        IReadOnlyList<ContextActivityObservation>? recentContext = null)
     {
         ArgumentNullException.ThrowIfNull(assessment);
         if (!assessment.ShouldNotifyDemon3) return null;
@@ -65,11 +90,46 @@ public sealed class BehaviorProfileValidator
         var mouse = assessment.FeatureResults.Where(x => x.Feature.StartsWith("mouse.", StringComparison.Ordinal)).ToArray();
         double? keyboardScore = keyboard.Length == 0 ? null : keyboard.Average(x => x.DeviationIndex);
         double? mouseScore = mouse.Length == 0 ? null : mouse.Average(x => x.DeviationIndex);
+        var contextSignal = BuildApplicationContextSignal(recentContext);
         return new BehaviorDeviationPayload(1, assessment.ObservedAtUtc, sid, sessionId,
             assessment.OperatorAssessment.ToString(), assessment.DeviationPercent, assessment.Confidence,
             assessment.IsEmpiricallyValidated ? "VALIDATED" : "UNVALIDATED",
-            new BehaviorDeviationSignals(keyboardScore, mouseScore, keyboard.Length, mouse.Length),
+            new BehaviorDeviationSignals(keyboardScore, mouseScore, keyboard.Length, mouse.Length, ApplicationContext: contextSignal),
             assessment.ReasonCodes, [], assessment.ObservedAtUtc.AddSeconds(30));
+    }
+
+    /// <summary>Summarizes foreground activity against recent learned samples. This is context, not a safety verdict.</summary>
+    public static ApplicationContextSignal? BuildApplicationContextSignal(IReadOnlyList<ContextActivityObservation>? observations)
+    {
+        if (observations is null || observations.Count == 0) return null;
+        var now = DateTimeOffset.UtcNow;
+        var ordered = observations.Where(x => x.ObservedAtUtc <= now).OrderByDescending(x => x.ObservedAtUtc).ToArray();
+        if (ordered.Length == 0) return null;
+        // The newest row is the observation being described. Never use it to establish its own familiarity.
+        var latest = ordered[0];
+        if (now - latest.ObservedAtUtc > TimeSpan.FromMinutes(5)) return null;
+        var history = ordered.Skip(1).Where(x => latest.ObservedAtUtc - x.ObservedAtUtc <= TimeSpan.FromDays(90)).ToArray();
+        var appHistory = history.Where(x => StringComparer.OrdinalIgnoreCase.Equals(x.ApplicationName, latest.ApplicationName)).ToArray();
+        var matureProfile = history.Length >= 30;
+        var seenInHistory = appHistory.Length > 0 ? true : matureProfile ? false : (bool?)null;
+        var hourCount = appHistory.Count(x => Math.Abs(x.LocalHour - latest.LocalHour) <= 1
+            || Math.Abs(x.LocalHour - latest.LocalHour) >= 23);
+        var commonHour = appHistory.Length >= 3 ? hourCount >= Math.Ceiling(appHistory.Length * 0.25) : (bool?)null;
+        var reason = !matureProfile ? "APPLICATION_HISTORY_INSUFFICIENT"
+            : seenInHistory == false ? "APPLICATION_NOT_SEEN_IN_PROFILE"
+            : appHistory.Length < 3 ? "APPLICATION_HOUR_HISTORY_INSUFFICIENT"
+            : commonHour == true ? "APPLICATION_AND_HOUR_SEEN_IN_PROFILE" : "APPLICATION_SEEN_AT_UNUSUAL_HOUR";
+        return new(latest.ProfileId, latest.ObservedAtUtc, Math.Max(0, (int)(now - latest.ObservedAtUtc).TotalSeconds), latest.ApplicationName,
+            latest.ForegroundSeconds, latest.LocalHour, latest.LocalDayOfWeek, seenInHistory, commonHour,
+            latest.ForegroundCpuPercent, latest.ForegroundMemoryMiB, latest.SystemMemoryUsedPercent, history.Length, reason);
+    }
+
+    public static UserContextPayload? ToUserContextPayload(IReadOnlyList<ContextActivityObservation>? recentContext, string sessionId)
+    {
+        var signal = BuildApplicationContextSignal(recentContext);
+        if (signal is null || string.IsNullOrWhiteSpace(sessionId)) return null;
+        var now = DateTimeOffset.UtcNow;
+        return new(1, signal.ObservedAtUtc, sessionId, signal, now.AddSeconds(30));
     }
 
     public BehaviorAssessment Assess(

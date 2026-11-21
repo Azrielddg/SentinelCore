@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace SentinelCore.Demon1.Learning;
 
 /// <summary>SQLite learning database. Feature values and profiles are DPAPI-protected per row.</summary>
-public sealed class SqliteLearningProfileRepository : IAtomicLearningRepository, IDisposable
+public sealed class SqliteLearningProfileRepository : IAtomicLearningRepository, IContextActivityRepository, IDisposable
 {
     private readonly string _connectionString;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
@@ -42,7 +42,16 @@ public sealed class SqliteLearningProfileRepository : IAtomicLearningRepository,
             );
             CREATE INDEX IF NOT EXISTS idx_learning_observations_owner_date
                 ON learning_observations(sid_hash, observed_utc DESC);
-            PRAGMA user_version=1;
+            CREATE TABLE IF NOT EXISTS context_activity (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sid_hash TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                observed_utc TEXT NOT NULL,
+                protected_observation BLOB NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_context_activity_profile_date
+                ON context_activity(sid_hash, profile_id, observed_utc DESC);
+            PRAGMA user_version=2;
             """;
         command.ExecuteNonQuery();
     }
@@ -175,6 +184,51 @@ public sealed class SqliteLearningProfileRepository : IAtomicLearningRepository,
         command.CommandText = "SELECT COUNT(*) FROM learning_observations WHERE sid_hash=$sid";
         command.Parameters.AddWithValue("$sid", HashSid(sid));
         return (long)(command.ExecuteScalar() ?? 0L);
+    }
+
+    public void AppendContextActivity(string sid, ContextActivityObservation observation)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ValidateProfileId(observation.ProfileId);
+        if (observation.ApplicationName.Length > 96) throw new ArgumentException("Nom d’application trop long.", nameof(observation));
+        var protectedObservation = CurrentUserDpapi.Protect(JsonSerializer.SerializeToUtf8Bytes(observation, JsonOptions), sid);
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "INSERT INTO context_activity(sid_hash,profile_id,observed_utc,protected_observation) VALUES($sid,$profile,$at,$payload)";
+        command.Parameters.AddWithValue("$sid", HashSid(sid));
+        command.Parameters.AddWithValue("$profile", observation.ProfileId);
+        command.Parameters.AddWithValue("$at", observation.ObservedAtUtc.ToString("O"));
+        command.Parameters.Add("$payload", SqliteType.Blob).Value = protectedObservation;
+        command.ExecuteNonQuery();
+    }
+
+    public IReadOnlyList<ContextActivityObservation> ReadRecentContextActivity(string sid, string profileId, int take = 5000)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ValidateProfileId(profileId);
+        take = Math.Clamp(take, 1, 20000);
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT protected_observation FROM context_activity WHERE sid_hash=$sid AND profile_id=$profile ORDER BY id DESC LIMIT $take";
+        command.Parameters.AddWithValue("$sid", HashSid(sid));
+        command.Parameters.AddWithValue("$profile", profileId);
+        command.Parameters.AddWithValue("$take", take);
+        using var reader = command.ExecuteReader();
+        var rows = new List<ContextActivityObservation>();
+        while (reader.Read())
+        {
+            var bytes = CurrentUserDpapi.Unprotect((byte[])reader[0], sid);
+            var observation = JsonSerializer.Deserialize<ContextActivityObservation>(bytes, JsonOptions);
+            if (observation is not null) rows.Add(observation);
+        }
+        return rows;
+    }
+
+    private static void ValidateProfileId(string profileId)
+    {
+        if (profileId.Length is < 8 or > 16 || !profileId.StartsWith("PROFIL_", StringComparison.Ordinal)
+            || !int.TryParse(profileId.AsSpan(7), out var number) || number is < 1 or > 8)
+            throw new ArgumentException("Identifiant de profil invalide.", nameof(profileId));
     }
 
     private SqliteConnection Open()

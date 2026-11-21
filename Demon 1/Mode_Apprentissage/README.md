@@ -29,6 +29,8 @@ La fenêtre permet :
 - de suivre l’état et les dernières mesures en temps réel;
 - de consulter les 200 dernières périodes enregistrées;
 - de modifier la période de mesure (10–60 s) et l’arrêt après inactivité (30–900 s);
+- de configurer jusqu’à huit profils et de choisir le profil auquel rattacher une session d’apprentissage;
+- de voir un résumé des programmes souvent au premier plan, des heures observées et de leur utilisation médiane du CPU/de la mémoire;
 - de changer le mot de passe maître après vérification de l’ancien.
 
 La base est enregistrée dans `%LOCALAPPDATA%\SentinelCore\Demon1Learning\learning.db`. Les profils et mesures sont chiffrés par DPAPI par compte utilisateur Windows. Le mot de passe maître et les empreintes sont enregistrés dans `auth.bin`, également protégé DPAPI. Les préférences générales sont dans `settings.json`.
@@ -37,9 +39,9 @@ Dans la fenêtre « Voir la base », les dates, contextes, états, décisions et
 
 ## Données collectées
 
-Le collecteur Windows Raw Input agrège les événements par période : fréquence de frappe, durée d’appui, intervalle et pauses entre frappes, vitesse/accélération/curvature de la souris et intervalles de clic. Les codes de touches n’existent qu’en mémoire le temps de calculer une durée d’appui; aucun caractère ni texte n’est écrit dans le profil. Les mesures brutes temporaires sont abandonnées après calcul.
+Le collecteur Windows Raw Input agrège les événements par période : fréquence de frappe, durée d’appui, intervalle et pauses entre frappes, vitesse/accélération/curvature de la souris et intervalles de clic. Les codes de touches n’existent qu’en mémoire le temps de calculer une durée d’appui; aucun caractère ni texte n’est écrit dans le profil. Les mesures comportementales des profils 1 à 8 sont séparées par identifiant de contexte dans la base. Pendant une collecte, le collecteur observe aussi une fois par seconde le processus de premier plan, son CPU/sa mémoire et la mémoire utilisée par le système, puis enregistre une synthèse par période dans SQLite chiffrée par DPAPI. Les noms de fenêtre, commandes lancées et contenus ne sont pas collectés par D1.
 
-Le système exclut les événements quand la fenêtre SentinelCore est active, n’enregistre pas de mesure si l’activité est insuffisante et interrompt la collecte après le délai d’inactivité configuré. Ce module ne produit pas de verdict d’identité; le module de validation le fera plus tard.
+Le système exclut les événements quand la fenêtre SentinelCore est active, n’enregistre pas de mesure clavier/souris si l’activité est insuffisante et interrompt la collecte après le délai d’inactivité configuré. Les horaires, applications de premier plan et ressources sont collectés par profil. La validation comportementale compare clavier/souris; le module visuel local (YuNet/SFace/MiniFASNetV2), l’enrôlement par profil et les payloads D1→D3 sont également présents. Le choix automatique du profil, la connexion continue au pipe résident D3 et l’intégration complète de la preuve au rapport demeurent à construire.
 
 ## Structure
 
@@ -49,11 +51,11 @@ Le système exclut les événements quand la fenêtre SentinelCore est active, n
 - `simulation` : simulation de calibration et test de fumée du collecteur publié.
 - `fonctionnement.txt` : explication simple, exemples et comportement attendu.
 
-La branche `feature/demon-1` regroupe le travail du démon 1. Le contrôleur et les composants de l’apprentissage restent dans le dossier de ce module.
+La branche de travail est `feature/demon-1-validation`. Le contrôleur, l’apprentissage et la validation restent dans le dossier de ce module.
 
 ## Vérification effectuée
 
-- `dotnet build Demon 1/SentinelCore.Demon1.slnx -c Release` : réussi, 0 avertissement et 0 erreur.
+- `dotnet build Demon 1/SentinelCore.Demon1.slnx --configuration Release` : réussi sur l’état courant, 0 avertissement et 0 erreur (21 novembre 2026).
 - Publication autonome `win-x64` en fichier unique : réussie.
 - Simulation d’apprentissage synthétique : 70/70 périodes admissibles acceptées et 2/2 périodes inadmissibles rejetées; 322 périodes SQLite persistées et relues. Ces pourcentages évaluent uniquement les règles sur des données synthétiques, pas la reconnaissance du propriétaire.
 - Test fumée du collecteur publié : un `status.json` déjà présent a été mis à jour, le ticket a été consommé une fois, l’arrêt a été appliqué, puis le JSON final a été relu. Une preuve incorrecte a été refusée et un test temporaire a vérifié que le mot de passe maître fonctionne sans apparaître en clair dans le fichier. L’exception d’accès montrée auparavant n’est pas réapparue.

@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\SentinelCore.Demon1.Learning\SentinelCore.Demon1.Learning.csproj" />
+    <ProjectReference Include="..\..\..\Mode_Validation\src\SentinelCore.Demon1.Validation\SentinelCore.Demon1.Validation.csproj" />
   </ItemGroup>
 </Project>

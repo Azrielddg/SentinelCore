@@ -1,8 +1,10 @@
 using System.Globalization;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows.Forms;
 using SentinelCore.Demon1.Learning;
+using SentinelCore.Demon1.Validation;
 
 public static class CollectorRuntime
 {
@@ -37,28 +39,38 @@ public static class CollectorRuntime
             throw new InvalidOperationException("Authentification absente, expirée ou invalide. Démarre la collecte depuis la fenêtre SentinelCore.");
         var idleLimitSeconds = int.TryParse(o.GetValueOrDefault("idle-seconds", "90"), out var idleArg) ? Math.Clamp(idleArg, 30, 900) : 90;
         var windowSeconds = int.TryParse(o.GetValueOrDefault("window-seconds", "15"), out var windowArg) ? Math.Clamp(windowArg, 10, 60) : 15;
+        var profileId = context.Split('|', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "PROFIL_1";
+        if (!profileId.StartsWith("PROFIL_", StringComparison.Ordinal) || !int.TryParse(profileId.AsSpan(7), out var profileNumber) || profileNumber is < 1 or > 8)
+            throw new ArgumentException("Le contexte doit commencer par PROFIL_1 à PROFIL_8.");
         using var repository = new SqliteLearningProfileRepository(database);
         var service = new LearningModeService(repository);
         var ignorePid = int.TryParse(o.GetValueOrDefault("ignore-pid"), out var parsedPid) ? parsedPid : 0;
         var collector = new RawInputLearningCollector(context, ignorePid, windowSeconds);
+        var contextSampler = new ContextWindowSampler(ignorePid);
         collector.Start();
         Console.WriteLine("CAPTURE_ACTIVE");
         IReadOnlyDictionary<string, double> latestMeasures = new Dictionary<string, double>();
+        ContextActivityObservation? latestActivity = null;
+        IReadOnlyList<ApplicationHabit> applicationHabits = [];
+        IReadOnlyList<ContextActivityObservation> latestContextHistory = [];
+        BehaviorAssessment? latestBehaviorAssessment = null;
+        BehaviorDeviationPayload? latestBehaviorPayload = null;
 
         using var statusTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         using var windowTimer = new System.Windows.Forms.Timer { Interval = windowSeconds * 1000 };
         statusTimer.Tick += (_, _) =>
         {
             if (File.Exists(stopPath)) { statusTimer.Stop(); windowTimer.Stop(); Application.ExitThread(); return; }
+            contextSampler.Sample();
             if (GetIdleSeconds() >= idleLimitSeconds)
             {
                 statusTimer.Stop(); windowTimer.Stop(); collector.Stop();
-                WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), false, $"Collecte arrêtée après {idleLimitSeconds} secondes sans interaction. Redémarre-la manuellement.", latestMeasures);
+                WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), false, $"Collecte arrêtée après {idleLimitSeconds} secondes sans interaction. Redémarre-la manuellement.", latestMeasures, latestActivity, applicationHabits, latestBehaviorAssessment, latestBehaviorPayload);
                 Application.ExitThread();
                 return;
             }
-            try { WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), true, null, latestMeasures); }
-            catch (Exception ex) { WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), true, ex.Message, latestMeasures); }
+            try { WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), true, null, latestMeasures, latestActivity, applicationHabits, latestBehaviorAssessment, latestBehaviorPayload); }
+            catch (Exception ex) { WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), true, ex.Message, latestMeasures, latestActivity, applicationHabits, latestBehaviorAssessment, latestBehaviorPayload); }
         };
         windowTimer.Tick += (_, _) =>
         {
@@ -66,19 +78,32 @@ public static class CollectorRuntime
             {
                 var window = collector.TakeWindow();
                 latestMeasures = window.Features;
+                var activity = contextSampler.TakeWindow(profileId);
+                latestActivity = activity;
+                if (activity is not null)
+                {
+                    repository.AppendContextActivity(sid, activity);
+                    latestContextHistory = repository.ReadRecentContextActivity(sid, profileId, 5000);
+                    applicationHabits = ContextActivityAnalysis.BuildApplicationHabits(latestContextHistory);
+                }
                 if (window.Features.Count == 0) return;
-                var observation = new LearningWindow(sid, DateTimeOffset.UtcNow, context, window.Features, window.Quality,
+                var observedAt = DateTimeOffset.UtcNow;
+                var validator = new BehaviorProfileValidator();
+                var baselineBeforeWindow = service.GetReport(sid, context);
+                latestBehaviorAssessment = validator.Assess(baselineBeforeWindow, window.Features, window.Quality, observedAt);
+                latestBehaviorPayload = validator.ToDemon3Payload(latestBehaviorAssessment, sid, Process.GetCurrentProcess().SessionId.ToString(), latestContextHistory);
+                var observation = new LearningWindow(sid, observedAt, context, window.Features, window.Quality,
                     OwnerVerification.OWNER_CONFIRMED, InputOrigin.PHYSICAL_DEVICE, ThreatContext.CLEAR);
                 var result = service.Observe(observation);
-                WriteStatus(statusPath, collector.Snapshot(), result.Report, true, result.Disposition == SampleDisposition.ACCEPTED ? null : result.Reason, latestMeasures);
+                WriteStatus(statusPath, collector.Snapshot(), result.Report, true, result.Disposition == SampleDisposition.ACCEPTED ? null : result.Reason, latestMeasures, latestActivity, applicationHabits, latestBehaviorAssessment, latestBehaviorPayload);
             }
-            catch (Exception ex) { WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), true, ex.Message, latestMeasures); }
+            catch (Exception ex) { WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), true, ex.Message, latestMeasures, latestActivity, applicationHabits, latestBehaviorAssessment, latestBehaviorPayload); }
         };
         statusTimer.Start(); windowTimer.Start();
-        WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), true, null, latestMeasures);
+        WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), true, null, latestMeasures, latestActivity, applicationHabits);
         Application.Run(new ApplicationContext());
         collector.Stop();
-        WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), false, "Capture arrêtée par l’utilisateur.", latestMeasures);
+        WriteStatus(statusPath, collector.Snapshot(), service.GetReport(sid, context), false, "Capture arrêtée par l’utilisateur.", latestMeasures, latestActivity, applicationHabits, latestBehaviorAssessment, latestBehaviorPayload);
         return 0;
     }
 
@@ -103,7 +128,7 @@ public static class CollectorRuntime
         return 0;
     }
 
-    private static void WriteStatus(string path, CollectorSnapshot sensor, LearningReport report, bool active, string? note, IReadOnlyDictionary<string, double> latestMeasures)
+    private static void WriteStatus(string path, CollectorSnapshot sensor, LearningReport report, bool active, string? note, IReadOnlyDictionary<string, double> latestMeasures, ContextActivityObservation? latestContext = null, IReadOnlyList<ApplicationHabit>? applicationHabits = null, BehaviorAssessment? behaviorAssessment = null, BehaviorDeviationPayload? behaviorDeviationPayload = null)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var payload = new
@@ -123,6 +148,10 @@ public static class CollectorRuntime
             report.CalibrationProgressPercent,
             report.Features,
             latestMeasures,
+            latestContext,
+            applicationHabits,
+            behaviorAssessment,
+            behaviorDeviationPayload,
             note
         };
         // The controller reads this file while the collector updates it. Replacing an
@@ -167,6 +196,74 @@ public static class CollectorRuntime
 
 internal sealed record CollectedWindow(IReadOnlyDictionary<string, double> Features, double Quality);
 internal sealed record CollectorSnapshot(int WindowSeconds, int KeyPresses, int MouseMoves, int Clicks, int PendingKeys);
+
+internal sealed class ContextWindowSampler(int ignoredProcessId)
+{
+    private sealed record SampleRow(string App, int Pid, double? Cpu, double? MemoryMiB, DateTimeOffset At);
+    private readonly List<SampleRow> _rows = [];
+    private readonly Dictionary<int, (TimeSpan Cpu, long Tick)> _lastCpu = [];
+    private readonly int _ignoredProcessId = ignoredProcessId;
+
+    public void Sample()
+    {
+        var hwnd = GetForegroundWindow();
+        GetWindowThreadProcessId(hwnd, out var rawPid);
+        var pid = unchecked((int)rawPid);
+        if (pid <= 0 || pid == _ignoredProcessId) return;
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            var name = new string(process.ProcessName.Where(char.IsAsciiLetterOrDigit).Take(48).ToArray());
+            if (string.IsNullOrWhiteSpace(name)) name = "Unknown";
+            double? cpu = null;
+            var cpuTime = process.TotalProcessorTime;
+            var tick = Environment.TickCount64;
+            if (_lastCpu.TryGetValue(pid, out var previous))
+            {
+                var elapsedMs = Math.Max(1, tick - previous.Tick);
+                cpu = Math.Clamp((cpuTime - previous.Cpu).TotalMilliseconds / elapsedMs / Math.Max(1, Environment.ProcessorCount) * 100, 0, 100);
+            }
+            _lastCpu[pid] = (cpuTime, tick);
+            _rows.Add(new(name, pid, cpu, process.WorkingSet64 / 1024d / 1024d, DateTimeOffset.Now));
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or System.Security.SecurityException) { }
+        if (_rows.Count > 120) _rows.RemoveRange(0, _rows.Count - 120);
+        if (_lastCpu.Count > 256)
+            foreach (var oldPid in _lastCpu.Keys.Take(_lastCpu.Count - 256).ToArray()) _lastCpu.Remove(oldPid);
+    }
+
+    public ContextActivityObservation? TakeWindow(string profileId)
+    {
+        if (_rows.Count == 0) return null;
+        var dominant = _rows.GroupBy(x => x.App, StringComparer.OrdinalIgnoreCase).OrderByDescending(x => x.Count()).First();
+        var rows = dominant.ToArray();
+        var now = rows[^1].At;
+        var cpuValues = rows.Where(x => x.Cpu.HasValue).Select(x => x.Cpu!.Value).ToArray();
+        var memoryValues = rows.Where(x => x.MemoryMiB.HasValue).Select(x => x.MemoryMiB!.Value).ToArray();
+        var memory = new MemoryStatusEx { Length = (uint)Marshal.SizeOf<MemoryStatusEx>() };
+        double? systemMemory = GlobalMemoryStatusEx(ref memory) ? memory.MemoryLoad : null;
+        var result = new ContextActivityObservation(profileId, now.ToUniversalTime(), dominant.Key,
+            now.Hour, (int)now.DayOfWeek, Math.Min(60, rows.Length), Median(cpuValues), Median(memoryValues), systemMemory);
+        _rows.Clear();
+        return result;
+    }
+
+    private static double? Median(double[] values)
+    {
+        if (values.Length == 0) return null;
+        Array.Sort(values);
+        return values.Length % 2 == 1 ? values[values.Length / 2] : (values[values.Length / 2 - 1] + values[values.Length / 2]) / 2;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)] private struct MemoryStatusEx
+    {
+        public uint Length, MemoryLoad;
+        public ulong TotalPhys, AvailPhys, TotalPageFile, AvailPageFile, TotalVirtual, AvailVirtual, AvailExtendedVirtual;
+    }
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll", SetLastError = true)] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)] private static extern bool GlobalMemoryStatusEx(ref MemoryStatusEx buffer);
+}
 
 internal sealed class RawInputLearningCollector
 {

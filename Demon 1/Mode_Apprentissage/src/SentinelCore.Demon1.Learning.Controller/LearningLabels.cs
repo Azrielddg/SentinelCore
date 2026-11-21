@@ -43,6 +43,8 @@ internal static class LearningLabels
         "LOCAL|INTEGRATED_KB|MOUSE_USB" => "Session locale — clavier intégré et souris USB",
         _ => string.Join(" · ", key.Split('|').Select(part => part switch
         {
+            "PROFIL_1" => "Profil 1", "PROFIL_2" => "Profil 2", "PROFIL_3" => "Profil 3", "PROFIL_4" => "Profil 4",
+            "PROFIL_5" => "Profil 5", "PROFIL_6" => "Profil 6", "PROFIL_7" => "Profil 7", "PROFIL_8" => "Profil 8",
             "LOCAL" => "Locale", "DEFAULT_KB" => "Clavier standard", "DEFAULT_MOUSE" => "Souris standard",
             "INTEGRATED_KB" => "Clavier intégré", "MOUSE_USB" => "Souris USB", _ => part.Replace('_', ' ')
         }))
