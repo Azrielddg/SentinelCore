@@ -32,6 +32,7 @@ public sealed record VisualVerificationOptions(
     double SimilarityThreshold = 0.363,
     double MinimumLivenessProbability = 0.80,
     double MinimumFacePixels = 100,
+    float MinimumFaceConfidence = 0.60f,
     int LiveClassIndex = 1,
     bool Enabled = true);
 
@@ -50,6 +51,7 @@ public sealed class VisualVerificationService : IDisposable
     private readonly ProtectedVisualStore _store;
     private bool _disposed;
     public bool HasEnrolledProfiles => _store.LoadTemplates().Count > 0;
+    public string LastCaptureDiagnostics { get; private set; } = "capture_non_exécutée";
 
     public VisualVerificationService(VisualVerificationOptions options)
     {
@@ -60,7 +62,7 @@ public sealed class VisualVerificationService : IDisposable
         if (options.MaximumWaitSeconds is < 5 or > 60) throw new ArgumentOutOfRangeException(nameof(options.MaximumWaitSeconds));
         Directory.CreateDirectory(options.DataDirectory);
         _store = new ProtectedVisualStore(options.DataDirectory);
-        _detector = FaceDetectorYN.Create(options.YuNetModelPath, string.Empty, new Size(640, 480), 0.85f, 0.3f, 5000);
+        _detector = FaceDetectorYN.Create(options.YuNetModelPath, string.Empty, new Size(640, 480), options.MinimumFaceConfidence, 0.3f, 5000);
         _recognizer = FaceRecognizerSF.Create(options.SFaceModelPath, string.Empty);
         _liveness = Cv2.Dnn.ReadNetFromONNX(options.MiniFasNetModelPath)
             ?? throw new InvalidDataException("OpenCV n’a pas pu charger le modèle anti-usurpation.");
@@ -73,7 +75,9 @@ public sealed class VisualVerificationService : IDisposable
     {
         ValidateProfileId(profileId);
         var sequence = await CaptureSequenceAsync(cancellationToken).ConfigureAwait(false);
-        if (sequence.Embeddings.Count < 4) return (false, "ENROLLMENT_INSUFFICIENT_FACE_FRAMES");
+        LastCaptureDiagnostics = sequence.Diagnostics;
+        if (sequence.FramesMultipleFaces > 0) return (false, "ENROLLMENT_MULTIPLE_FACES");
+        if (sequence.Embeddings.Count < 4) return (false, EnrollmentFailureReason(sequence));
         if (sequence.LiveScores.Count < 4 || sequence.LiveScores.Average() < _options.MinimumLivenessProbability)
             return (false, "ENROLLMENT_LIVENESS_NOT_CONFIRMED");
         var template = AverageAndNormalize(sequence.Embeddings);
@@ -102,14 +106,21 @@ public sealed class VisualVerificationService : IDisposable
         {
             return Inconclusive(correlationId, started, "VISUAL_ENGINE_ERROR_" + ex.GetType().Name.ToUpperInvariant());
         }
+        LastCaptureDiagnostics = sequence.Diagnostics;
 
-        if (sequence.Embeddings.Count < 3) return Inconclusive(correlationId, started, "FACE_QUALITY_OR_FRAME_COUNT_LOW", sequence, SaveEvidence(sequence.BestFrame, correlationId));
+        if (sequence.FramesMultipleFaces > 0)
+            return Inconclusive(correlationId, started, "MULTIPLE_FACES_IN_FRAME", sequence, SaveEvidence(sequence.BestFrame, correlationId));
+        if (sequence.Embeddings.Count < 3)
+            return Inconclusive(correlationId, started, VerificationFailureReason(sequence), sequence, SaveEvidence(sequence.BestFrame, correlationId));
         if (sequence.LiveScores.Count < 3) return Inconclusive(correlationId, started, "LIVENESS_MODEL_NO_RESULT", sequence, SaveEvidence(sequence.BestFrame, correlationId));
         var liveness = sequence.LiveScores.Average() >= _options.MinimumLivenessProbability
             ? LivenessResult.LIVE : LivenessResult.SPOOF_SUSPECTED;
         if (liveness != LivenessResult.LIVE)
             return new(correlationId, DateTimeOffset.UtcNow, VisualMatch.INDETERMINATE, liveness, null, null,
                 sequence.Quality, sequence.Embeddings.Count, SaveEvidence(sequence.BestFrame, correlationId), "LIVENESS_NOT_CONFIRMED");
+        if (sequence.Quality < 0.55)
+            return new(correlationId, DateTimeOffset.UtcNow, VisualMatch.INDETERMINATE, liveness, null, null,
+                sequence.Quality, sequence.Embeddings.Count, SaveEvidence(sequence.BestFrame, correlationId), "FACE_QUALITY_TOO_LOW");
 
         var query = AverageAndNormalize(sequence.Embeddings);
         var ranked = _store.LoadTemplates().Select(x => (x.Key, Score: Cosine(query, x.Value)))
@@ -117,8 +128,10 @@ public sealed class VisualVerificationService : IDisposable
         if (ranked.Length == 0) return Inconclusive(correlationId, started, "NO_ENROLLED_VISUAL_PROFILE", sequence, SaveEvidence(sequence.BestFrame, correlationId));
         var best = ranked[0];
         var margin = ranked.Length == 1 ? 1 : best.Score - ranked[1].Score;
-        // For multiple users require a useful margin as well as a face similarity threshold.
-        if (best.Score < _options.SimilarityThreshold || margin < 0.04)
+        if (margin < 0.04)
+            return new(correlationId, DateTimeOffset.UtcNow, VisualMatch.INDETERMINATE, liveness, null, best.Score,
+                sequence.Quality, sequence.Embeddings.Count, SaveEvidence(sequence.BestFrame, correlationId), "AMBIGUOUS_PROFILE_MARGIN");
+        if (best.Score < _options.SimilarityThreshold)
             return new(correlationId, DateTimeOffset.UtcNow, VisualMatch.NO_MATCH, liveness, null, best.Score,
                 sequence.Quality, sequence.Embeddings.Count, SaveEvidence(sequence.BestFrame, correlationId), "NO_PROFILE_OVER_CALIBRATED_THRESHOLD");
         return new(correlationId, DateTimeOffset.UtcNow, VisualMatch.MATCH, liveness, best.Key, best.Score,
@@ -141,6 +154,8 @@ public sealed class VisualVerificationService : IDisposable
                 byte[]? bestFrame = null;
                 var bestFrameQuality = -1.0;
                 var qualitySum = 0.0;
+                var framesRead = 0; var framesNoFace = 0; var framesMultipleFaces = 0; var framesTooSmall = 0; var framesLowConfidence = 0;
+                var maxFaceSize = 0.0;
                 var deadline = DateTimeOffset.UtcNow.AddSeconds(_options.CaptureSeconds);
                 using var frame = new Mat();
                 using var detections = new Mat();
@@ -150,19 +165,30 @@ public sealed class VisualVerificationService : IDisposable
                 {
                     token.ThrowIfCancellationRequested();
                     if (!camera.Read(frame) || frame.Empty()) { Thread.Sleep(50); continue; }
+                    framesRead++;
                     var frameQuality = 0.0;
                     _detector.SetInputSize(new Size(frame.Width, frame.Height));
                     _detector.Detect(frame, detections);
-                    if (detections.Rows != 1)
+                    var detectionRows = detections.Rows;
+                    if (detectionRows != 1)
                     {
+                        if (detectionRows == 0) framesNoFace++;
+                        else
+                        {
+                            framesMultipleFaces++;
+                            for (var faceIndex = 0; faceIndex < detectionRows; faceIndex++)
+                                maxFaceSize = Math.Max(maxFaceSize, Math.Min(detections.At<float>(faceIndex, 2), detections.At<float>(faceIndex, 3)));
+                        }
                         if (bestFrame is null) { Cv2.ImEncode(".jpg", frame, out bestFrame); bestFrameQuality = 0; }
                         Thread.Sleep(SampleIntervalMs); continue;
                     }
                     var faceWidth = detections.At<float>(0, 2);
                     var faceHeight = detections.At<float>(0, 3);
+                    maxFaceSize = Math.Max(maxFaceSize, Math.Min(faceWidth, faceHeight));
                     var detectorScore = detections.At<float>(0, 14);
-                    if (Math.Min(faceWidth, faceHeight) < _options.MinimumFacePixels || detectorScore < 0.85f)
+                    if (Math.Min(faceWidth, faceHeight) < _options.MinimumFacePixels || detectorScore < _options.MinimumFaceConfidence)
                     {
+                        if (Math.Min(faceWidth, faceHeight) < _options.MinimumFacePixels) framesTooSmall++; else framesLowConfidence++;
                         if (bestFrame is null) { Cv2.ImEncode(".jpg", frame, out bestFrame); bestFrameQuality = 0; }
                         Thread.Sleep(SampleIntervalMs); continue;
                     }
@@ -176,7 +202,9 @@ public sealed class VisualVerificationService : IDisposable
                     { Cv2.ImEncode(".jpg", frame, out bestFrame); bestFrameQuality = frameQuality; }
                     Thread.Sleep(SampleIntervalMs);
                 }
-                return new CaptureSequence(embeddings, liveScores, embeddings.Count == 0 ? 0 : qualitySum / embeddings.Count, bestFrame);
+                return new CaptureSequence(embeddings, liveScores, embeddings.Count == 0 ? 0 : qualitySum / embeddings.Count, bestFrame,
+                    framesRead, framesNoFace, framesMultipleFaces, framesTooSmall, framesLowConfidence, maxFaceSize,
+                    $"read={framesRead};face={embeddings.Count};none={framesNoFace};multiple={framesMultipleFaces};small={framesTooSmall};lowConfidence={framesLowConfidence};maxFacePx={maxFaceSize:0};liveCount={liveScores.Count};liveAvg={(liveScores.Count == 0 ? 0 : liveScores.Average()):0.000};liveMin={(liveScores.Count == 0 ? 0 : liveScores.Min()):0.000};liveMax={(liveScores.Count == 0 ? 0 : liveScores.Max()):0.000}");
             }, token).ConfigureAwait(false);
         }
         finally { CameraCaptureGate.Release(); }
@@ -249,6 +277,26 @@ public sealed class VisualVerificationService : IDisposable
         => new(id, DateTimeOffset.UtcNow, VisualMatch.INDETERMINATE, LivenessResult.INDETERMINATE, null, null,
             seq?.Quality ?? 0, seq?.Embeddings.Count ?? 0, evidenceRef, reason);
 
+    private static string EnrollmentFailureReason(CaptureSequence sequence)
+    {
+        if (sequence.FramesRead == 0) return "ENROLLMENT_CAMERA_NO_FRAMES";
+        if (sequence.FramesMultipleFaces > 0) return "ENROLLMENT_MULTIPLE_FACES";
+        if (sequence.FramesTooSmall > 0 && sequence.FramesTooSmall >= sequence.FramesLowConfidence) return "ENROLLMENT_FACE_TOO_SMALL";
+        if (sequence.FramesLowConfidence > 0) return "ENROLLMENT_FACE_CONFIDENCE_LOW";
+        if (sequence.FramesNoFace == sequence.FramesRead) return "ENROLLMENT_FACE_NOT_DETECTED";
+        return "ENROLLMENT_TOO_FEW_VALID_FACE_FRAMES";
+    }
+
+    private static string VerificationFailureReason(CaptureSequence sequence)
+    {
+        if (sequence.FramesRead == 0) return "CAMERA_NO_FRAMES";
+        if (sequence.FramesMultipleFaces > 0) return "MULTIPLE_FACES_IN_FRAME";
+        if (sequence.FramesTooSmall > 0 && sequence.FramesTooSmall >= sequence.FramesLowConfidence) return "FACE_TOO_SMALL";
+        if (sequence.FramesLowConfidence > 0) return "FACE_CONFIDENCE_LOW";
+        if (sequence.FramesNoFace == sequence.FramesRead) return "FACE_NOT_DETECTED";
+        return "FACE_QUALITY_OR_FRAME_COUNT_LOW";
+    }
+
     private static void ValidateProfileId(string id)
     {
         if (string.IsNullOrWhiteSpace(id) || id.Length > 64 || id.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '_' and not '-'))
@@ -264,7 +312,8 @@ public sealed class VisualVerificationService : IDisposable
         _detector.Dispose(); _recognizer.Dispose(); _liveness.Dispose();
     }
 
-    private sealed record CaptureSequence(List<float[]> Embeddings, List<double> LiveScores, double Quality, byte[]? BestFrame);
+    private sealed record CaptureSequence(List<float[]> Embeddings, List<double> LiveScores, double Quality, byte[]? BestFrame,
+        int FramesRead, int FramesNoFace, int FramesMultipleFaces, int FramesTooSmall, int FramesLowConfidence, double MaxFaceSizePixels, string Diagnostics);
 }
 
 /// <summary>Per-user DPAPI storage: templates and retained report evidence are encrypted at rest.</summary>

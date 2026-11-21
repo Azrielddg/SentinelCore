@@ -21,7 +21,11 @@ dotnet build .\SentinelCore.Demon1.slnx --configuration Release
 
 Le premier script télécharge YuNet, SFace et MiniFASNetV2 vers `%LOCALAPPDATA%\SentinelCore\Demon1Learning\models`, puis vérifie leur SHA-256. Les poids ONNX ne sont pas suivis dans Git. Les références, licences et limites figurent dans `Modeles/README.md` et `COMPARAISON_SOLUTIONS.md`.
 
-Ouvrir ensuite la fenêtre de contrôle du mode apprentissage. Choisir un profil, saisir le mot de passe maître et utiliser « Enrôler le visage ». Dans Paramètres, activer « Autoriser le contrôle visuel demandé par le démon 3 ». « Simuler une alerte visuelle » permet une vérification locale manuelle.
+Ouvrir ensuite la fenêtre de contrôle du mode apprentissage. Choisir un profil, confirmer le mot de passe maître et utiliser « Enrôler le visage » en regardant la caméra dans une pièce éclairée. Dans Paramètres, activer « Autoriser le contrôle visuel demandé par le démon 3 ». Le bouton « Tester demande D3 + caméra » crée une vraie demande D3, ouvre la caméra, capture une séquence et exécute les modèles de détection, de comparaison et d’anti-usurpation. Aucun résultat n’est préfabriqué.
+
+Les détails des captures (nombre d’images lues, visages trouvés, taille du visage et scores de présence) sont visibles avec les résultats dans « Rapports visuels ». Une caméra indisponible, aucun visage, plusieurs visages, une faible qualité ou une présence non confirmée doit donner un résultat `INDETERMINATE`, jamais une identité positive.
+
+Le programme `simulation/SentinelCore.Demon1.VisualSimulation` peut aussi vérifier les cas techniques depuis PowerShell : `--camera-d3` essaie l’enrôlement puis l’appel D3 réel, `--camera-request` fait l’appel D3 avec la webcam réelle, et `--camera-failure` vérifie la réponse en cas d’index caméra invalide. Les essais écrivent des résultats sans conserver les captures ni les profils temporaires.
 
 ## Interface inter-démons
 
