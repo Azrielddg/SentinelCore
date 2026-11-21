@@ -1,5 +1,7 @@
 **/bin/
 **/obj/
 Mode_Apprentissage/artifacts/
+Mode_Validation/test-artifacts/*.mp4
+Mode_Validation/simulation/historique_essais_camera.jsonl
 .vs/
 *.user

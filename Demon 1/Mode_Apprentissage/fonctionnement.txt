@@ -1,73 +1,51 @@
-MODE APPRENTISSAGE DU DÉMON 1 — COMMENT ÇA FONCTIONNE
+MODE APPRENTISSAGE DU DÉMON 1 — EXPLICATION SIMPLE
 
-Ce fichier explique avec des mots simples les fonctions déjà présentes et ce qui reste à raccorder. D1 observe les habitudes de travail et apporte du contexte à D3. D2 observe les menaces techniques; D3 garde la décision finale.
+1. Ouvrir la fenêtre de contrôle
 
-1. Ouvrir la fenêtre de contrôle — disponible
+Double-clique sur SentinelCore.Demon1.Learning.Controller.exe. La fenêtre s’ouvre, mais elle ne commence pas à surveiller le clavier ou la souris toute seule. Elle montre l’état de l’apprentissage, les dernières mesures, la base et les paramètres.
 
-La fenêtre ne commence pas à collecter au simple lancement. Elle affiche l’état, les réglages, les données de la base et les habitudes d’applications.
+Exemple : si tu ouvres l’application pour consulter la base, elle ne lance pas la collecte en arrière-plan.
 
-Exemple : si tu ouvres la fenêtre seulement pour consulter les mesures de la veille, aucune nouvelle période n’est enregistrée.
+2. Première configuration du propriétaire
 
-2. Créer et utiliser le mot de passe maître — disponible
+Au premier lancement, l’application demande de créer un mot de passe maître d’au moins 12 caractères. Elle ne conserve pas ce mot de passe en clair : elle garde une empreinte calculée à partir de celui-ci, protégée par Windows pour ton compte.
 
-Au premier lancement, SentinelCore demande un mot de passe maître. Pour commencer chaque séance d’apprentissage, il faut le mot de passe maître ou la vérification Windows Hello, puis confirmer le démarrage. La collecte s’arrête après une durée sans activité ou avec le bouton Arrêter.
+Exemple : tu choisis le mot de passe une seule fois dans la fenêtre de configuration. Tu pourras ensuite le changer depuis le bouton « Changer le mot de passe ».
 
-Exemple : tu choisis 90 secondes d’inactivité. Si tu quittes le PC et ne touches ni souris ni clavier pendant ce temps, le collecteur s’arrête.
+Aux lancements suivants, une fenêtre propose deux choix pour ouvrir l’application : la reconnaissance faciale locale de SentinelCore ou le mot de passe maître. La reconnaissance faciale utilise les modèles enregistrés dans l’application, pas Windows Hello. Elle est disponible après l’enrôlement d’un profil visuel.
 
-3. Apprendre les habitudes clavier/souris — disponible
+3. Confirmer le démarrage de l’étude
 
-Pendant une séance, D1 calcule des résumés : rythme de frappe, durée des appuis, pauses, vitesse et changements de direction de la souris, rythme des clics. Les caractères des phrases ne sont pas conservés; les mesures sont regroupées par période et chiffrées dans la base locale.
+Après avoir ouvert l’application par visage ou mot de passe maître, saisis le mot de passe maître pour démarrer une collecte d’apprentissage. Une confirmation te demande ensuite si tu veux commencer.
 
-Exemple : D1 peut garder « rythme moyen proche de 120 touches par minute » sans garder la phrase écrite dans l’éditeur ou le mot de passe saisi.
+Après la vérification, une seconde question demande si tu veux vraiment commencer. Il faut répondre oui. Un jeton temporaire, protégé par Windows et utilisable une seule fois, est remis au collecteur pour autoriser ce démarrage.
 
-4. Organiser plusieurs utilisateurs — disponible, sélection manuelle
+Exemple : la fenêtre reste ouverte toute la journée. La collecte ne commence qu’après la vérification du mot de passe maître et ta confirmation, même si tu as ouvert l’application avec le visage.
 
-Dans Paramètres, le propriétaire peut créer de 1 à 8 profils. Avant de commencer une séance, il sélectionne le profil correspondant. Les mesures clavier/souris, les applications observées et le visage enrôlé sont associés à ce profil.
+4. Ce que le démon apprend
 
-Exemple : Alice sélectionne PROFIL_1 le matin; Bob sélectionne PROFIL_2 le soir. Leurs données restent séparées. Aujourd’hui, l’application ne choisit pas automatiquement Alice ou Bob : la sélection se fait dans la fenêtre.
+Le démon calcule des mesures résumées sur des périodes configurables : rythme de frappe, durée d’appui et pauses entre les touches, vitesse et variations de la souris, changements de direction et intervalles entre les clics. Il n’enregistre pas les lettres tapées, les mots de passe, le texte du presse-papiers, ni les coordonnées détaillées de la souris.
 
-5. Apprendre les horaires, applications et ressources — première version disponible
+Exemple : il peut enregistrer « rythme moyen de frappe = valeur X » sans conserver la phrase qui a été écrite.
 
-Pendant une séance autorisée, D1 observe une fois par seconde le nom du programme au premier plan, l’heure, le jour, le temps visible estimé, sa mémoire et son CPU quand Windows fournit la mesure. Il relève aussi la mémoire totale utilisée par l’ordinateur. Les résumés sont chiffrés dans la base. D1 ne lit pas les titres de fenêtres, lignes de commande, textes affichés ou fichiers ouverts.
+5. Suivre le travail et consulter la base
 
-Exemple : D1 peut apprendre que Visual Studio Code et un terminal sont souvent utilisés entre 9 h et 11 h, et que l’éditeur utilise généralement une certaine quantité de mémoire. Cela aide à expliquer le contexte, mais ne prouve pas qu’une commande est sûre.
+La fenêtre d’application actualise l’état et les mesures environ chaque seconde. « Voir la base » affiche les périodes déjà enregistrées et leurs mesures. Les colonnes, décisions, états et noms des mesures sont affichés en français. Les noms techniques internes de la base restent inchangés pour que l’application continue à lire les anciennes données. Les données sont gardées sur cet ordinateur dans le dossier local SentinelCore; les mesures et les profils sont protégés par Windows pour le compte courant.
 
-6. Consulter la base et les habitudes — disponible
+Exemple : après une période active, tu peux ouvrir la base et voir la date, la qualité et les mesures de clavier/souris, sans retrouver les caractères tapés.
 
-« Voir la base » affiche les périodes enregistrées. « Voir habitudes » regroupe les applications par fréquence, heures et ressources médianes. Les données sensibles sont protégées par Windows (DPAPI) pour le compte courant.
+6. Paramètres et arrêt
 
-Exemple : tu peux voir que le terminal apparaît souvent autour de 10 h et consomme d’habitude une quantité semblable de mémoire. Les commandes tapées n’apparaissent pas.
+Le bouton « Paramètres » permet de choisir la durée des périodes de mesure (10 à 60 secondes) et le délai d’arrêt après inactivité (30 à 900 secondes). Ces changements s’appliquent au prochain démarrage. « Arrêter » met fin à la collecte; les périodes déjà sauvegardées restent dans la base. Fermer l’application demande si la collecte doit être arrêtée.
 
-7. Comprendre l’évaluation comportementale — moteur disponible, intégration continue à raccorder
+Exemple : avec une inactivité réglée à 90 secondes, le collecteur s’arrête si Windows ne reçoit aucune entrée clavier/souris pendant 90 secondes.
 
-Le module de validation compare un résumé récent clavier/souris au profil. Il peut répondre « cohérent », « différent » ou « données insuffisantes ». Il utilise un indice de divergence : 60 est un seuil de signalement, pas 60 % de probabilité d’attaque. Ce seuil n’a pas encore été calibré sur suffisamment de vraies séances et de personnes.
+7. Reconnaissance et limites
 
-Exemple : une personne utilise un autre clavier et tape plus lentement. Le module peut signaler une différence ou manquer de données; D3 doit alors garder l’incertitude au lieu de conclure automatiquement à une attaque.
+Ce mode apprend et enregistre un profil de comportement. Il ne décide pas à lui seul du risque final. Le contrôle visuel est configuré séparément dans les paramètres. Le bouton « Tester demande D3 + caméra » exécute maintenant une vraie capture webcam et le moteur facial local, puis enregistre le résultat et les détails de capture dans les rapports.
 
-8. Donner du contexte à D3 — disponible quand le collecteur tourne et que D3 est lancé
+8. Correction de l’erreur montrée
 
-D1 se connecte au Named Pipe de D3 avec HELLO/WELCOME et un heartbeat. Pendant une collecte autorisée, il envoie des payloads `USER_CONTEXT` pour résumer le programme au premier plan, l’heure, la mémoire et le CPU; en cas de divergence, il ajoute aussi ce contexte au payload `BEHAVIOR_DEVIATION`. D3 héberge le Named Pipe sécurisé et reçoit ces messages. Le démon 2 n’obtient pas les gabarits, images, mesures détaillées de frappe ou souris. Si D3 n’est pas lancé, D1 continue localement et réessaie la connexion.
+L’ancienne version remplaçait status.json par déplacement d’un fichier temporaire. Sur ton PC, Windows refusait ce remplacement pendant que le fichier était utilisé. Le collecteur écrit maintenant le nouveau statut dans le fichier en autorisant la lecture simultanée; l’interface réessaie la lecture si elle tombe au milieu de l’écriture.
 
-Exemple : D2 repère qu’un agent télécharge beaucoup de fichiers. D1 indique à D3 que le terminal et l’agent de code apparaissent souvent dans les séances habituelles. D3 conserve l’alerte de téléchargement et décide du risque avec les deux informations.
-
-9. Enrôler les visages et vérifier lors d’une alerte — moteur disponible, raccord D3 à terminer
-
-Le propriétaire choisit le profil, saisit le mot de passe maître et accepte une courte capture lors de l’enrôlement. D1 crée un gabarit facial chiffré localement. Dans les paramètres, la vérification visuelle peut être activée. Ensuite, quand D3 envoie une demande après un soupçon ou pour un rapport, D1 capture environ cinq secondes sans redemander une confirmation à chaque alerte. Le délai total peut aller jusqu’à une minute.
-
-Exemple : D2 envoie à D3 une alerte de téléchargement inattendu. D3 évalue déjà cette alerte et demande en parallèle à D1 une vérification. YuNet détecte le visage, SFace le compare aux profils, MiniFASNetV2 cherche des signes de photo ou de vidéo rejouée. D1 répond « MATCH », « NO_MATCH » ou « INDETERMINATE ». Reconnaître le propriétaire n’efface jamais l’alerte technique de D2.
-
-10. Ajouter une photo au rapport — mécanisme préparé, raccord final à D3 nécessaire
-
-La photo retenue est conservée chiffrée par DPAPI sous une référence opaque. Elle ne traverse pas le pipe en un gros fichier : D3 la demande par petits morceaux, l’assemble et intègre sa propre copie au rapport. Effacer plus tard la preuve source ne doit pas effacer une photo déjà incorporée dans un rapport.
-
-Exemple : le rapport d’incident conserve l’image capturée même si la copie temporaire locale a été purgée selon la politique qui sera définie.
-
-11. Que faire si la caméra ou les données manquent ?
-
-Si la caméra est absente, l’image floue, aucun visage unique détecté, le profil absent ou l’échéance dépassée, D1 répond `INDETERMINATE`. Il ne transforme jamais une erreur en reconnaissance du propriétaire.
-
-Exemple : l’écran est sombre ou deux personnes passent devant la caméra; D1 envoie « indéterminé », et D3 continue sa décision à partir des informations de D2.
-
-12. État actuel du projet
-
-La collecte et les réglages d’apprentissage, les résumés d’applications, le moteur local de comparaison visuelle, l’enrôlement par profil, le chiffrement des gabarits et preuves et le client du pipe D1↔D3 sont dans la branche du démon 1. La compilation Release réussit. Le démarrage permanent du démon D1 comme service, l’intégration finale dans le rapport de D3, les essais webcam réels et le calibrage statistique restent à faire.
+Un test a créé d’abord un status.json existant, lancé l’EXE, vérifié la mise à jour puis arrêté le collecteur : les trois étapes ont réussi sans « Access to the path is denied ».

@@ -16,15 +16,16 @@ Le script PowerShell `Controler-Apprentissage.ps1` est maintenant un simple lanc
 
 À la première ouverture, la fenêtre demande de créer le mot de passe maître (12 caractères minimum). Seule une empreinte PBKDF2 salée est stockée; le fichier est en plus chiffré avec DPAPI pour le compte Windows courant.
 
-Pour commencer une session, l’utilisateur doit réussir soit l’invite de vérification Windows Hello, soit la vérification du mot de passe maître, puis confirmer explicitement le démarrage. Si Hello échoue ou est annulé, aucune collecte ne commence. Le collecteur exige aussi un ticket protégé DPAPI à usage unique, valable 30 secondes, remis par le contrôleur après authentification.
+Aux ouvertures suivantes, le propriétaire choisit entre son mot de passe maître et la reconnaissance faciale locale de SentinelCore. Le bouton visage n’est disponible qu’après l’enrôlement d’au moins un profil. Le moteur utilise la webcam et les modèles locaux YuNet, SFace et MiniFASNetV2; il ne s’appuie pas sur Windows Hello. Si la vérification faciale échoue ou reste indéterminée, l’application ne s’ouvre pas par cette voie et le mot de passe maître reste proposé.
 
-Dans une application desktop .NET, l’intégration utilise l’API Windows `UserConsentVerifierInterop` liée à la fenêtre propriétaire. Windows décide quel fournisseur est disponible/configuré (visage, empreinte, PIN Hello); SentinelCore ne reçoit pas la donnée biométrique. La disponibilité réelle dépend du PC et des paramètres Windows Hello.
+Après authentification, une collecte d’apprentissage doit encore être démarrée explicitement et confirmée. Le collecteur exige aussi un ticket protégé DPAPI à usage unique, valable 30 secondes, remis par le contrôleur après authentification.
 
 ## Paramètres et suivi
 
 La fenêtre permet :
 
-- de lancer l’apprentissage via Windows Hello ou le mot de passe maître;
+- d’ouvrir l’application par reconnaissance faciale locale ou mot de passe maître;
+- de démarrer l’apprentissage après authentification et confirmation explicite;
 - d’arrêter la collecte manuellement;
 - de suivre l’état et les dernières mesures en temps réel;
 - de consulter les 200 dernières périodes enregistrées;
@@ -41,13 +42,13 @@ Dans la fenêtre « Voir la base », les dates, contextes, états, décisions et
 
 Le collecteur Windows Raw Input agrège les événements par période : fréquence de frappe, durée d’appui, intervalle et pauses entre frappes, vitesse/accélération/curvature de la souris et intervalles de clic. Les codes de touches n’existent qu’en mémoire le temps de calculer une durée d’appui; aucun caractère ni texte n’est écrit dans le profil. Les mesures comportementales des profils 1 à 8 sont séparées par identifiant de contexte dans la base. Pendant une collecte, le collecteur observe aussi une fois par seconde le processus de premier plan, son CPU/sa mémoire et la mémoire utilisée par le système, puis enregistre une synthèse par période dans SQLite chiffrée par DPAPI. Les noms de fenêtre, commandes lancées et contenus ne sont pas collectés par D1.
 
-Le système exclut les événements quand la fenêtre SentinelCore est active, n’enregistre pas de mesure clavier/souris si l’activité est insuffisante et interrompt la collecte après le délai d’inactivité configuré. Les horaires, applications de premier plan et ressources sont collectés par profil. La validation comportementale compare clavier/souris; le module visuel local (YuNet/SFace/MiniFASNetV2), l’enrôlement par profil et les payloads D1→D3 sont également présents. Le choix automatique du profil, la connexion continue au pipe résident D3 et l’intégration complète de la preuve au rapport demeurent à construire.
+Le système exclut les événements quand la fenêtre SentinelCore est active, n’enregistre pas de mesure clavier/souris si l’activité est insuffisante et interrompt la collecte après le délai d’inactivité configuré. Les horaires, applications de premier plan et ressources sont collectés par profil. La validation comportementale compare clavier/souris; l’identité visuelle locale (YuNet/SFace/MiniFASNetV2), les rapports et les échanges avec D3 sont présents. Le contrôleur doit rester ouvert pour maintenir son client local connecté au pipe de D3.
 
 ## Structure
 
 - `src/SentinelCore.Demon1.Learning` : profils, règles d’admission, SQLite, DPAPI et ticket de démarrage à usage unique.
 - `src/SentinelCore.Demon1.Learning.Collector` : collecte Windows clavier/souris et écriture de l’état.
-- `src/SentinelCore.Demon1.Learning.Controller` : interface WinForms, mot de passe maître, Windows Hello, paramètres et contrôles.
+- `src/SentinelCore.Demon1.Learning.Controller` : interface WinForms, mot de passe maître, choix d’authentification faciale, paramètres et rapports.
 - `simulation` : simulation de calibration et test de fumée du collecteur publié.
 - `fonctionnement.txt` : explication simple, exemples et comportement attendu.
 
@@ -59,14 +60,15 @@ La branche de travail est `feature/demon-1-validation`. Le contrôleur, l’appr
 - Publication autonome `win-x64` en fichier unique : réussie.
 - Simulation d’apprentissage synthétique : 70/70 périodes admissibles acceptées et 2/2 périodes inadmissibles rejetées; 322 périodes SQLite persistées et relues. Ces pourcentages évaluent uniquement les règles sur des données synthétiques, pas la reconnaissance du propriétaire.
 - Test fumée du collecteur publié : un `status.json` déjà présent a été mis à jour, le ticket a été consommé une fois, l’arrêt a été appliqué, puis le JSON final a été relu. Une preuve incorrecte a été refusée et un test temporaire a vérifié que le mot de passe maître fonctionne sans apparaître en clair dans le fichier. L’exception d’accès montrée auparavant n’est pas réapparue.
-- Lancement UI : l’EXE s’ouvre et affiche la configuration initiale. La création du mot de passe et l’invite biométrique sont laissées à l’utilisateur; ces invites sensibles ne sont pas automatisées.
+- Authentification faciale : le code de la fenêtre propose visage local ou mot de passe maître après la première configuration. Le scénario de caméra a été exécuté en CLI pour ne pas créer ou saisir un mot de passe maître pendant le test.
+- Tests webcam réels : les résultats et limites d’enrôlement, l’absence de visage, le refus de liveness et l’indisponibilité caméra sont consignés dans `Mode_Validation/ESSAIS_REELS_D1.md`.
+- Tests comportementaux : `dotnet run --project tests/SentinelCore.Demon1.Tests --configuration Release --no-build` exécute les contrôles du moteur et rejoue les 50 cas publiés; tous passent. Cela ne mesure pas la reconnaissance biométrique.
 
 Le taux de faux rejet/faux acceptation du futur module de validation n’est pas mesurable avec ce module d’apprentissage seul. La collecte terrain (durées, variations d’appareils et qualité des mesures) reste à évaluer sur des sessions choisies par le propriétaire.
 
 ## Documentation Windows
 
 - [Windows Raw Input](https://learn.microsoft.com/en-us/windows/win32/inputdev/using-raw-input)
-- [Windows Hello face authentication](https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/windows-hello-face-authentication)
-- [UserConsentVerifier et vérification dans une application desktop](https://learn.microsoft.com/en-us/uwp/api/windows.security.credentials.ui.userconsentverifier)
-- [Interop WinRT pour les applications .NET desktop](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/winrt-com-interop-csharp)
-- [Windows Biometric Framework](https://learn.microsoft.com/en-us/windows/win32/secbiomet/biometric-framework-overview)
+- [OpenCV Zoo — YuNet et SFace](https://github.com/opencv/opencv_zoo)
+- [MiniVision — Silent-Face-Anti-Spoofing](https://github.com/minivision-ai/Silent-Face-Anti-Spoofing)
+- [Exemple ONNX MiniFASNetV2 et webcam](https://github.com/yakhyo/face-anti-spoofing)

@@ -4,7 +4,6 @@ using System.Text.Json;
 using SentinelCore.Demon1.Learning;
 using SentinelCore.Demon1.Validation;
 using SentinelCore.Demon1.VisualVerification;
-using Windows.Security.Credentials.UI;
 
 namespace SentinelCore.Demon1.Learning.Controller;
 
@@ -47,13 +46,13 @@ internal sealed class MainForm : Form
         buttons.Controls.Add(new Label { Text = "Profil :", AutoSize = true, Padding = new Padding(4, 12, 0, 0) });
         buttons.Controls.Add(_profileSelector);
         RefreshProfiles();
-        buttons.Controls.Add(Button("Démarrer avec Windows Hello", StartWithHelloAsync, 230));
         buttons.Controls.Add(Button("Démarrer avec le mot de passe maître", StartWithPassword, 270));
         buttons.Controls.Add(Button("Arrêter", StopLearning, 100));
         buttons.Controls.Add(Button("Voir la base", ShowDatabase, 120));
         buttons.Controls.Add(Button("Voir habitudes", ShowApplicationHabits, 130));
         buttons.Controls.Add(Button("Enrôler le visage", EnrollFaceAsync, 155));
-        buttons.Controls.Add(Button("Simuler une alerte visuelle", SimulateVisualAlertAsync, 205));
+        buttons.Controls.Add(Button("Tester demande D3 + caméra", SimulateVisualAlertAsync, 220));
+        buttons.Controls.Add(Button("Rapports visuels", ShowVisualReports, 145));
         buttons.Controls.Add(Button("Paramètres", ShowSettings, 120));
         buttons.Controls.Add(Button("Changer le mot de passe", ChangePassword, 180));
         root.Controls.Add(buttons, 0, 1);
@@ -99,27 +98,6 @@ internal sealed class MainForm : Form
     {
         var button = new Button { Text = text, Width = width, Height = 42, Margin = new Padding(4) };
         button.Click += (_, _) => action(); return button;
-    }
-
-    private async void StartWithHelloAsync()
-    {
-        if (IsRunning()) { Append("L’apprentissage est déjà actif."); return; }
-        try
-        {
-            var result = await UserConsentVerifierInterop.RequestVerificationForWindowAsync(Handle, "Confirme ton identité avant de démarrer l’apprentissage SentinelCore.");
-            if (result != UserConsentVerificationResult.Verified)
-            {
-                Append($"Windows Hello n’a pas confirmé l’identité : {result}. Tu peux choisir le mot de passe maître.");
-                MessageBox.Show($"La vérification Windows Hello n’a pas abouti ({result}).\nAucune collecte n’a démarré. Tu peux réessayer ou utiliser le mot de passe maître.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            ConfirmAndStart("Windows Hello / biométrie Windows");
-        }
-        catch (Exception ex)
-        {
-            Append("Windows Hello indisponible : " + ex.Message);
-            MessageBox.Show("Windows Hello n’est pas disponible ici. La collecte n’a pas démarré. Utilise le mot de passe maître ou vérifie la configuration Windows Hello.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
     }
 
     private void StartWithPassword()
@@ -278,23 +256,32 @@ internal sealed class MainForm : Form
         return true;
     }
 
-    private VisualVerificationService CreateVisualVerifier()
+    private VisualVerificationService CreateVisualVerifier(bool forceEnabled = false)
     {
-        lock (_visualServiceGate)
+        if (!forceEnabled)
         {
-            if (_visualVerifier is not null) return _visualVerifier;
-            var models = Path.Combine(_dataRoot, "models");
-            _visualVerifier = new VisualVerificationService(new VisualVerificationOptions(
-                Path.Combine(models, "face_detection_yunet_2023mar.onnx"),
-                Path.Combine(models, "face_recognition_sface_2021dec.onnx"),
-                Path.Combine(models, "MiniFASNetV2.onnx"),
-                Path.Combine(_dataRoot, "visual"),
-                CameraIndex: _settings.VisualCameraIndex,
-                CaptureSeconds: 5,
-                MaximumWaitSeconds: 60,
-                Enabled: _settings.VisualVerificationEnabled));
-            return _visualVerifier;
+            lock (_visualServiceGate)
+            {
+                if (_visualVerifier is not null) return _visualVerifier;
+                _visualVerifier = new VisualVerificationService(BuildVisualOptions(_settings.VisualVerificationEnabled));
+                return _visualVerifier;
+            }
         }
+        return new VisualVerificationService(BuildVisualOptions(enabled: true));
+    }
+
+    private VisualVerificationOptions BuildVisualOptions(bool enabled)
+    {
+        var models = Path.Combine(_dataRoot, "models");
+        return new VisualVerificationOptions(
+            Path.Combine(models, "face_detection_yunet_2023mar.onnx"),
+            Path.Combine(models, "face_recognition_sface_2021dec.onnx"),
+            Path.Combine(models, "MiniFASNetV2.onnx"),
+            Path.Combine(_dataRoot, "visual"),
+            CameraIndex: _settings.VisualCameraIndex,
+            CaptureSeconds: 5,
+            MaximumWaitSeconds: 60,
+            Enabled: enabled);
     }
 
     private async void EnrollFaceAsync()
@@ -307,6 +294,7 @@ internal sealed class MainForm : Form
         {
             var verifier = CreateVisualVerifier();
             var result = await verifier.EnrollProfileAsync(profileId);
+            VisualCheckReportStore.AppendEnrollment(_dataRoot, profileId, result.Success, result.ReasonCode, verifier.LastCaptureDiagnostics);
             if (result.Success)
             {
                 _settings = _settings with { VisualVerificationEnabled = true };
@@ -322,15 +310,27 @@ internal sealed class MainForm : Form
 
     private async void SimulateVisualAlertAsync()
     {
-        if (!_settings.VisualVerificationEnabled) { MessageBox.Show("Active la vérification en enrôlant d’abord un visage avec le mot de passe maître.", Text, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        VisualVerificationService? verifier = null;
         try
         {
-            var verifier = CreateVisualVerifier();
-            var result = await verifier.VerifyAlertAsync(Guid.NewGuid().ToString("D"));
-            Append($"Vérification visuelle de simulation : {result.Match}/{result.Liveness}, profil={result.ProfileId ?? "aucun"}, qualité={result.FaceQuality:0.00}, preuve={result.EvidenceRef ?? "aucune"}, motif={result.ReasonCode}.");
-            MessageBox.Show($"Résultat : {result.Match}\nPrésence : {result.Liveness}\nProfil : {result.ProfileId ?? "aucun"}\nQualité : {result.FaceQuality:0.00}\nMotif : {result.ReasonCode}", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            verifier = CreateVisualVerifier(forceEnabled: true);
+            var correlationId = Guid.NewGuid().ToString("D");
+            var now = DateTimeOffset.UtcNow;
+            var request = new VisualIdentityRequest(correlationId, "SUSPICION", now, now.AddSeconds(60), true);
+            var handler = new Demon1VisualRequestHandler(verifier, () => true);
+            var response = await handler.HandleAsync(request);
+            VisualCheckReportStore.Append(_dataRoot, "SIMULATION_D3_CAMERA_REELLE", response, verifier.LastCaptureDiagnostics);
+            Append($"Simulation D3 réelle : {response.Status}/{response.Liveness}, profil={response.ProfileId ?? "aucun"}, qualité={response.FaceQuality:0.00}, images={response.ValidFrames}, preuve={response.EvidenceRef ?? "aucune"}, motif={response.ReasonCode}.");
+            MessageBox.Show($"D3 a demandé une vérification; D1 a réellement capturé la caméra et exécuté le moteur facial.\n\nRésultat : {response.Status}\nPrésence : {response.Liveness}\nProfil : {response.ProfileId ?? "aucun"}\nQualité : {response.FaceQuality:0.00}\nImages valides : {response.ValidFrames}\nMotif : {response.ReasonCode}", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
-        catch (Exception ex) { Append("Simulation visuelle impossible : " + ex.Message); MessageBox.Show("Vérifie les modèles et la caméra.\n\n" + ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (Exception ex) { Append("Test caméra/D3 impossible : " + ex.Message); MessageBox.Show("Vérifie les modèles et la caméra.\n\n" + ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        finally { verifier?.Dispose(); }
+    }
+
+    private void ShowVisualReports()
+    {
+        using var reports = new VisualReportsDialog(_dataRoot);
+        reports.ShowDialog(this);
     }
 
     private async Task ConnectToDemon3Async()
@@ -438,9 +438,10 @@ internal sealed class MainForm : Form
                 if (!StringComparer.Ordinal.Equals(request.CorrelationId, message.CorrelationId)
                     || request.DeadlineUtc > message.ExpiresAtUtc)
                     throw new InvalidDataException("La demande visuelle ne respecte pas sa corrélation ou son expiration.");
-                var verifier = await Task.Run(CreateVisualVerifier).ConfigureAwait(false);
+                var verifier = await Task.Run(() => CreateVisualVerifier()).ConfigureAwait(false);
                 var handler = new Demon1VisualRequestHandler(verifier, () => _settings.VisualVerificationEnabled);
                 var response = await handler.HandleAsync(request);
+                VisualCheckReportStore.Append(_dataRoot, "REQUETE_D3", response, verifier.LastCaptureDiagnostics);
                 await client.SendAsync("VISUAL_IDENTITY_RESPONSE", message.CorrelationId, response, DateTimeOffset.UtcNow.AddSeconds(30));
                 AppendFromAnyThread($"Réponse D1 à la demande visuelle {message.CorrelationId} : {response.Status}/{response.Liveness} ({response.ReasonCode}).");
             }

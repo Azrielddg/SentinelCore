@@ -50,9 +50,9 @@ Sortie : `physical_input_likelihood`, `injected_input_likelihood`, `automation_l
 
 Enrôlement dans les paramètres SentinelCore, initié explicitement par le propriétaire. À la demande, capture locale d’une courte séquence vidéo (objectif initial : 5 secondes), détection du visage, contrôle de présence/liveness et comparaison au gabarit du propriétaire. La capture est traitée localement; le modèle doit produire `match_score`, `liveness_score`, qualité et résultat. Si la caméra ou le contrôle de présence échoue, résultat `UNKNOWN`, jamais `OWNER` par défaut.
 
-Windows Hello reste une option native de ré-authentification, mais ne livre pas à SentinelCore son modèle facial brut ni son identité multi-profil. Le prototype local actuel utilise YuNet pour détecter le visage, SFace pour le comparer et MiniFASNetV2 pour repérer certaines images/relectures. Il est implémenté en .NET avec OpenCvSharp 5; les poids sont téléchargés par un script avec empreintes SHA-256 vérifiées. L’enrôlement requiert le mot de passe maître et un accord initial; une fois la fonction activée dans les paramètres, les demandes déclenchées par D3 n’affichent pas de confirmation répétée. Aucune image n’est envoyée à Ollama, à un serveur ou à un service tiers.
+Étudier en premier les capacités Windows Hello / Windows Biometric Framework disponibles sur l’appareil. Windows Hello offre re-authentification et anti-spoofing sur matériel compatible, mais ne livre pas à SentinelCore son modèle facial brut. Si un mode propriétaire distinct avec vidéo de 5 secondes est développé, sélectionner et documenter un moteur local, les formats et la protection du gabarit avant l’implémentation. Aucun envoi d’images vers Ollama, un serveur ou un service tiers.
 
-Une image d’événement est conservée localement sous une référence opaque et chiffrée avec DPAPI. D3 peut la lire par morceaux pour l’intégrer au rapport; le rapport doit conserver sa propre copie une fois intégré. La gestion de durée de conservation et de purge automatique de la preuve locale reste à définir. Les scores des modèles sont des indices, pas des probabilités ni une garantie contre une vidéo d’attaque sophistiquée.
+La vidéo ou l’image d’un événement peut être référencée dans le rapport sous un identifiant de preuve, horodatage, hash et état de stockage. Comme le besoin de conserver l’image dans le rapport entre en conflit avec une suppression automatique du fichier, le stockage de la preuve doit avoir une politique de rétention séparée : chiffrement local, ACL Windows strictes, accès journalisé, et suppression explicite par le propriétaire/politique de conservation. Les rapports doivent indiquer si la preuve est encore disponible.
 
 ### E. `BehaviorProfileEngine`
 
@@ -62,25 +62,25 @@ Une fenêtre atypique, ambiguë, injectée ou associée à une menace D2 est mis
 
 ### F. `HumanContextScorer` et `Demon3Publisher`
 
-La validation comportementale actuelle compare les mesures clavier/souris à des statistiques robustes et renvoie une divergence 0–100 ou `INCONCLUSIVE`. Le prototype visuel produit séparément `MATCH`, `NO_MATCH` ou `INDETERMINATE`, présence réelle, qualité et référence de preuve. Le résumé d’application/heure/CPU/mémoire peut être inclus dans les payloads D1 destinés à D3. Les signaux restent séparés : la présence du propriétaire ne diminue jamais la gravité technique d’un événement D2 par elle-même.
+Calcule les sous-scores indépendants (visage/liveness, clavier, souris, provenance, session) puis une divergence globale 0–100. Chaque rapport contient les scores disponibles, le niveau de confiance, les raisons explicables et les capteurs indisponibles. Une donnée absente n’est pas convertie en score neutre ou positif.
 
-Le client D1 se connecte maintenant au pipe nommé de D3, fait le handshake, envoie ses heartbeats, publie `USER_CONTEXT` pendant une collecte active et transmet `BEHAVIOR_DEVIATION` après une comparaison faite avant l’ajout de la fenêtre courante au profil. Il répond aux demandes de contexte/visuelles et sert la preuve par morceaux. D3 doit encore implémenter l’allowlist et le traitement de ces types, puis copier l’image dans son rapport. D1 n’exécute pas de réponse de sécurité.
+Publier à D3 si divergence > 60, identité différente probable, automatisation probable, liveness échouée, ou signal de qualité insuffisante dans une situation sensible. Publier également un contexte normal périodique pour que D3 sache que D1 fonctionne. D1 n’exécute pas de réponse destructive; il n’arrête pas seul des processus et ne bloque pas l’accès aux données.
 
 ## 4. Définition du seuil de 60 %
 
-Le 60 est un **seuil de divergence du profil**, pas une probabilité que l’utilisateur soit malveillant ni une probabilité d’erreur du modèle. La règle comportementale est implémentée, mais l’indicateur `IsEmpiricallyValidated` reste faux jusqu’à l’évaluation sur des personnes et sessions réelles distinctes. Le score reste un indice non calibré; D3 ne doit pas le traiter comme verdict.
+Le 60 est un **seuil de divergence du profil**, pas une probabilité que l’utilisateur soit malveillant ni une probabilité d’erreur du modèle. Le score doit être défini et documenté comme indice composite 0–100, étalonné sur des données réelles autorisées et des scénarios séparés par session/jour. Avant cet étalonnage, marquer le score `UNVALIDATED`; D3 peut l’utiliser comme signal, pas comme verdict.
 
-La validation comportementale déclenche maintenant `BEHAVIOR_DEVIATION` au-dessus de 60 si les données sont assez fiables; cette règle logicielle n’établit pas une précision statistique terrain. Le branchement au transport D3 résident reste à faire.
+La branche actuelle ne satisfait pas cette exigence : son `AnomalyLevel` est un score heuristique et le publisher avertit à 0,35. Il faut remplacer ce déclenchement par la définition ci-dessus avant de présenter D1 comme conforme au seuil >60.
 
 ## 5. Contrat de message D1 → D3
 
-Types du contrat commun : `USER_CONTEXT`, `BEHAVIOR_DEVIATION`, `CONTEXT_REQUEST`, `CONTEXT_RESPONSE` et, pour l’identité visuelle, `VISUAL_IDENTITY_REQUEST`, `VISUAL_IDENTITY_RESPONSE`, `VISUAL_EVIDENCE_READ_REQUEST`, `VISUAL_EVIDENCE_CHUNK`. D3 héberge seul `\\.\pipe\SentinelCore.Guard`; D1 reste client. Les messages utilisent l’enveloppe v1, `correlationId`, expiration et limite 64 KiB. Seule la demande visuelle peut attendre jusqu’à 60 secondes; D3 continue d’évaluer les événements D2 pendant ce délai. Les types visuels sont spécifiés dans `Mode_Validation/CONTRAT_VISUEL_D1_D3.txt`.
+Types : `USER_CONTEXT`, `BEHAVIOR_DEVIATION`, `OWNER_IDENTITY_CHANGE`, `AUTOMATION_SUSPECTED`, `SENSOR_DEGRADED`, `HEARTBEAT`.
 
 Exemple de payload `BEHAVIOR_DEVIATION` :
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "observedAtUtc": "2026-11-20T10:42:18Z",
   "sid": "S-1-5-21-...",
   "sessionId": "42",
@@ -89,35 +89,21 @@ Exemple de payload `BEHAVIOR_DEVIATION` :
   "confidence": 0.81,
   "calibrationState": "UNVALIDATED",
   "signals": {
-    "keyboardDeviationPercent": 70,
-    "mouseDeviationPercent": 76,
-    "keyboardFeatureCount": 4,
-    "mouseFeatureCount": 4,
-    "rawKeystrokesStored": false,
-    "applicationContext": {
-      "profileId": "PROFIL_1",
-      "observedAtUtc": "2026-11-20T10:42:15Z",
-      "ageSeconds": 3,
-      "foregroundApplication": "Code",
-      "foregroundSeconds": 12,
-      "localHour": 10,
-      "localDayOfWeek": 5,
-      "seenInLearnedHistory": true,
-      "hourCommonForApplication": true,
-      "cpuPercent": 14.2,
-      "memoryMiB": 720,
-      "systemMemoryUsedPercent": 68,
-      "sampleCount": 30,
-      "reasonCode": "APPLICATION_AND_HOUR_SEEN_IN_PROFILE"
-    }
+    "visualMatch": "NOT_REQUESTED",
+    "liveness": "NOT_REQUESTED",
+    "typingCadence": "HIGH_DEVIATION",
+    "mouseDynamics": "HIGH_DEVIATION",
+    "injectedInput": "DETECTED",
+    "sessionType": "LOCAL"
   },
   "reasonCodes": ["INJECTED_INPUT", "MOUSE_CADENCE_OUTLIER"],
   "evidenceRefs": [],
+  "rawKeystrokesStored": false,
   "expiresAtUtc": "2026-11-20T10:42:48Z"
 }
 ```
 
-Ne jamais transmettre le texte saisi, les frappes individuelles ou le gabarit facial. Les images sont transférées par morceaux uniquement sur demande de D3, via une référence opaque locale, jamais un chemin arbitraire.
+Ne jamais transmettre le texte saisi, les frappes individuelles, le gabarit facial ou les images par défaut. Les références de preuve sont des identifiants locaux protégés, pas des chemins arbitraires fournis par l’IA.
 
 D2 → D3 fournit l’événement de sécurité et la chaîne de processus. D3 corrèle par SID, session, heure et identifiants de corrélation. D1 et D2 ne dépendent pas directement l’un de l’autre.
 
@@ -152,11 +138,9 @@ La proposition SentinelCore ajoute à la biométrie comportementale applicative 
 - BioCatch, biométrie comportementale : https://www.biocatch.com/resources/solution-brief/advanced-behavioral-biometrics
 - Étude multimodale frappe + souris : https://www.sciencedirect.com/science/article/pii/S0925231216314321
 - Microsoft Audit Event 4688 : https://learn.microsoft.com/windows/security/threat-protection/auditing/event-4688
-- OpenCV Zoo YuNet/MIT : https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet
-- OpenCV Zoo SFace/Apache-2.0 : https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface
-- OpenCvSharp 5 et API faciale : https://shimat.github.io/opencvsharp/api/OpenCvSharp.FaceRecognizerSF.html
-- MiniFASNet ONNX : https://github.com/yakhyo/face-anti-spoofing
 
 ## État d’implémentation du mode apprentissage
 
-Le dossier `Mode_Apprentissage/` contient le collecteur, le contrôle WinForms et SQLite/DPAPI, avec contexte d’application, heure, CPU et mémoire. `Mode_Validation/` contient la comparaison clavier/souris, le moteur visuel, l’enrôlement par profil et le client D1 du pipe commun. La compilation complète réussit. L’allowlist/traitement des types côté D3, le démarrage persistant de D1, les essais webcam réels, les mesures de faux rejets/acceptations et la copie finale de la preuve dans le rapport demeurent nécessaires.
+Le dossier `Mode_Apprentissage/` contient le collecteur Windows, la fenêtre de contrôle, le mot de passe maître, SQLite/DPAPI et les paramètres. L’ouverture de l’application propose le mot de passe maître ou le moteur facial local SentinelCore (YuNet/SFace/MiniFASNetV2); elle n’appelle pas Windows Hello. `Mode_Validation/` contient les comparaisons comportementale et visuelle ainsi que le client D1 du canal Guard.
+
+La compilation de la solution et la publication Windows autonome passent. Les tests comportementaux internes, dont les 50 scénarios publiés, passent. Les essais webcam réels figurent dans `Mode_Validation/ESSAIS_REELS_D1.md` : l’enrôlement n’a pas encore réussi, car MiniFASNetV2 n’a pas confirmé liveness sur les captures observées. En conséquence, ni `MATCH` propriétaire ni `NO_MATCH` avec une autre personne ne sont validés terrain. La suite doit calibrer qualité/liveness avec des captures réelles étiquetées; elle ne doit pas baisser le seuil sans essais de présentation (photo et écran). Le serveur Named Pipe exécutable de D3 n’est pas encore présent dans ce dépôt, donc l’IPC entre deux processus reste à intégrer et tester.
